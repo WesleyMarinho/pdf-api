@@ -6,7 +6,7 @@ const path = require('path');
 const { URL } = require('url');
 
 const app = express();
-const port = 3000; // Porta padrão. Mude se necessário.
+const port = process.env.PORT || 3000;
 const API_KEY = 'CHANGE_THIS_TO_A_VERY_SECRET_KEY_12345'; // <-- MUDE ISTO!
 const OUTPUT_DIR = path.join(__dirname, 'generated_pdfs');
 
