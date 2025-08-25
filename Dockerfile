@@ -1,29 +1,31 @@
-FROM node:20-slim
+# 1. Base Image: Usa uma imagem oficial que já vem com Puppeteer e Node.js.
+# A tag '21.11.0-node18' garante compatibilidade.
+FROM ghcr.io/puppeteer/puppeteer:21.11.0
 
-WORKDIR /app
+# 2. Application Setup
+# A imagem base já nos coloca em /home/pptruser. Vamos usar um diretório 'app' dentro dela.
+WORKDIR /home/pptruser/app
+
+# Copia os arquivos de definição de dependências.
 COPY package*.json ./
-RUN npm install
+
+# Instala apenas as dependências do seu aplicativo (ex: express),
+# pois o Puppeteer já está na imagem.
+# O '--omit=dev' é uma boa prática para produção.
+RUN npm install --omit=dev
+
+# Copia o resto do código do seu aplicativo.
 COPY . .
 
-# Instala dependências do Puppeteer
-RUN apt-get update && apt-get install -y \
-    wget \
-    ca-certificates \
-    fonts-liberation \
-    libnss3 \
-    libatk-bridge2.0-0 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    libpangocairo-1.0-0 \
-    libpango-1.0-0 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libgtk-3-0 \
-    && rm -rf /var/lib/apt/lists/*
+# Altera o proprietário dos arquivos para o usuário não-root 'pptruser' por segurança.
+RUN chown -R pptruser:pptruser .
 
+# Define o usuário que irá rodar a aplicação.
+USER pptruser
+
+# 3. Expose Port and Run
+# Expõe a porta que o seu servidor Express está escutando.
 EXPOSE 3000
-CMD ["node", "src/index.js"]
+
+# O comando que será executado quando o container iniciar.
+CMD [ "node", "server.js" ]
