@@ -7,7 +7,7 @@ const { URL } = require('url');
 
 const app = express();
 const port = process.env.PORT || 3000;
-const API_KEY = 'CHANGE_THIS_TO_A_VERY_SECRET_KEY_12345'; // <-- MUDE ISTO!
+const API_KEY = process.env.API_KEY || 'super_secure_key12345678';
 const OUTPUT_DIR = path.join(__dirname, 'generated_pdfs');
 
 // Cria o diretório de saída se ele não existir
