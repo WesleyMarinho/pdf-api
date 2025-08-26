@@ -140,7 +140,7 @@ app.post('/convert', apiKeyAuth, async (req, res) => {
         
         // Configurar viewport de desktop largo para evitar layout mobile
         await page.setViewport({
-            width: 1600,
+            width: 1200,
             height: 1000,
             deviceScaleFactor: 2
         });
