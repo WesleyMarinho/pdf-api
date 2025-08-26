@@ -22,32 +22,25 @@ if (!fs.existsSync(OUTPUT_DIR)) {
 }
 
 /**
- * Função de limpeza: varre o diretório de PDFs e apaga arquivos mais velhos que FILE_EXPIRATION_MS.
+ * Função de limpeza automática de PDFs antigos
  */
 const cleanupOldFiles = () => {
     fs.readdir(OUTPUT_DIR, (err, files) => {
-        if (err) {
-            console.error("Error reading PDF directory for cleanup:", err);
-            return;
-        }
+        if (err) return console.error("Erro ao ler diretório de PDFs:", err);
         for (const file of files) {
             const filePath = path.join(OUTPUT_DIR, file);
             fs.stat(filePath, (err, stats) => {
-                if (err) {
-                    console.error(`Error getting stats for file ${file}:`, err);
-                    return;
-                }
+                if (err) return console.error(`Erro ao obter stats do arquivo ${file}:`, err);
                 if (Date.now() - stats.mtime.getTime() > FILE_EXPIRATION_MS) {
                     fs.unlink(filePath, (err) => {
-                        if (err) console.error(`Failed to delete expired file: ${file}`, err);
-                        else console.log(`Deleted expired file: ${file}`);
+                        if (err) console.error(`Erro ao excluir arquivo antigo: ${file}`, err);
+                        else console.log(`PDF expirado deletado: ${file}`);
                     });
                 }
             });
         }
     });
 };
-
 setInterval(cleanupOldFiles, CLEANUP_INTERVAL_MS);
 
 // --- MIDDLEWARES ---
@@ -55,35 +48,27 @@ app.use(express.json({ limit: '10mb' }));
 
 const apiKeyAuth = (req, res, next) => {
     if (!API_KEY) {
-        console.warn('WARNING: API_KEY is not defined. Skipping authentication.');
+        console.warn('WARNING: API_KEY is not definido. Ignorando autenticação.');
         return next();
     }
     const providedKey = req.header('X-API-KEY');
-    if (providedKey && providedKey === API_KEY) {
-        return next();
-    }
-    if (!providedKey) {
-        console.warn('Request without API key, but continuing since API_KEY is optional.');
-        return next();
-    }
-    res.status(401).json({ success: false, error: 'Unauthorized: Invalid API Key' });
+    if (providedKey && providedKey === API_KEY) return next();
+    return res.status(401).json({ success: false, error: 'Unauthorized: Invalid API Key' });
 };
 
 /**
- * Aguarda que todos os elementos críticos sejam carregados
- * @param {import('puppeteer').Page} page
+ * Aguarda imagens, fontes e gráficos carregarem
  */
 async function waitForContentLoad(page) {
     try {
         console.log('Aguardando carregamento de imagens...');
-        // Aguarda imagens carregarem com timeout
         await Promise.race([
             page.evaluate(() => {
                 return Promise.all(
                     Array.from(document.images)
                         .filter(img => !img.complete)
                         .map(img => new Promise(resolve => {
-                            const timeout = setTimeout(() => resolve(), 3000); // 3s timeout por imagem
+                            const timeout = setTimeout(resolve, 3000);
                             img.onload = img.onerror = () => {
                                 clearTimeout(timeout);
                                 resolve();
@@ -91,156 +76,119 @@ async function waitForContentLoad(page) {
                         }))
                 );
             }),
-            new Promise(resolve => setTimeout(resolve, 8000)) // 8s timeout total
+            new Promise(resolve => setTimeout(resolve, 8000))
         ]);
 
-        console.log('Aguardando carregamento de fontes...');
-        // Aguarda fontes carregarem com timeout
+        console.log('Aguardando fontes...');
         await Promise.race([
             page.evaluateHandle(() => document.fonts.ready),
-            new Promise(resolve => setTimeout(resolve, 5000)) // 5s timeout
+            new Promise(resolve => setTimeout(resolve, 5000))
         ]);
 
-        console.log('Carregamento de conteúdo concluído.');
-
     } catch (error) {
-        console.log('Erro aguardando carregamento de conteúdo:', error.message);
+        console.log('Erro ao aguardar carregamento de conteúdo:', error.message);
     }
 }
 
-// --- ROTAS DA API ---
+/**
+ * Configura página para PDF A4 perfeito
+ */
+async function configurePageForA4(page) {
+    // Define viewport para manter proporção A4
+    await page.setViewport({
+        width: 1200,
+        height: 1697,
+        deviceScaleFactor: 2
+    });
 
-// Rota original melhorada para conversão de HTML
+    // Força CSS de tela, evitando modo print automático
+    await page.emulateMediaType('screen');
+
+    // Injeta CSS para manter largura A4 e gráficos lado a lado
+    await page.addStyleTag({
+        content: `
+            @media print {
+                html, body {
+                    width: 210mm !important;
+                    height: 297mm !important;
+                    margin: 0 auto !important;
+                    -webkit-print-color-adjust: exact !important;
+                }
+                .container, .container-fluid {
+                    max-width: 100% !important;
+                }
+                .row {
+                    display: flex !important;
+                    flex-wrap: wrap !important;
+                }
+                .col, [class*="col-"] {
+                    flex: 1 0 0 !important;
+                    max-width: 50% !important;
+                }
+            }
+        `
+    });
+}
+
+/**
+ * Gera PDF A4 otimizado
+ */
+async function generatePDF(page, options, outputPath) {
+    const pdfOptions = {
+        path: outputPath,
+        format: 'A4',
+        landscape: false,
+        printBackground: true,
+        preferCSSPageSize: true,
+        margin: {
+            top: options.marginTop || '8mm',
+            right: options.marginRight || '8mm',
+            bottom: options.marginBottom || '8mm',
+            left: options.marginLeft || '8mm'
+        },
+        scale: 1
+    };
+    return page.pdf(pdfOptions);
+}
+
+/**
+ * Espera gráficos renderizarem (ApexCharts/ECharts)
+ */
+async function waitForCharts(page) {
+    try {
+        await page.waitForFunction(
+            () => document.querySelectorAll('.apexcharts-canvas, .echarts').length > 0,
+            { timeout: 8000 }
+        );
+        await page.waitForTimeout(500);
+    } catch {
+        console.log('Gráficos não encontrados ou timeout.');
+    }
+}
+
+// --- ROTA /CONVERT ---
 app.post('/convert', apiKeyAuth, async (req, res) => {
     const { html, options = {} } = req.body;
-    if (!html) {
-        return res.status(400).json({ success: false, error: 'HTML is required.' });
-    }
+    if (!html) return res.status(400).json({ success: false, error: 'HTML is required.' });
 
-    let browser = null;
+    let browser;
     try {
-        // Configurações melhoradas do Puppeteer
         browser = await puppeteer.launch({
-            headless: "new", // Usa o novo modo headless
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-web-security',
-                '--disable-features=VizDisplayCompositor',
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding',
-                '--disable-ipc-flooding-protection',
-                '--font-render-hinting=none'
-            ]
-        });
-        
-        const page = await browser.newPage();
-        
-        // Configurar viewport de desktop largo para evitar layout mobile
-        await page.setViewport({
-            width: 1080,
-            height: 1920,
-            deviceScaleFactor: 2
+            headless: "new",
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
 
-        // Configurações de user agent
+        const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-        
-        console.log('Definindo conteúdo HTML...');
-        
-        // Define o conteúdo HTML com timeout estendido
-        await page.setContent(html, { 
-            waitUntil: ['networkidle0', 'domcontentloaded'], 
-            timeout: 60000 
-        });
-        
-        // Forçar CSS de tela e adicionar estilos para layout
-        await page.emulateMediaType('screen');
-        await page.addStyleTag({ content: `
-            @media print {
-                .no-print-break { break-inside: avoid !important; }
-                .container, .container-fluid { max-width: 100% !important; }
-                .row { display: flex !important; flex-wrap: wrap !important; }
-                .col, .col-* { flex: 1 !important; min-width: 0 !important; }
-            }
-        `});
-        
-        console.log('HTML definido, aguardando conteúdo dinâmico...');
-        
-        // Aguarda carregamento de conteúdo dinâmico
-        await Promise.race([
-            waitForContentLoad(page),
-            new Promise(resolve => setTimeout(resolve, 10000)) // 10s timeout total
-        ]);
-        
-        // Forçar CSS de tela (não de impressão) para manter layout desktop
-        await page.emulateMediaType('screen');
-        
-        // Aguardar gráficos renderizarem (ApexCharts/ECharts)
-        try {
-            await page.waitForFunction(
-                () => document.querySelectorAll('.apexcharts-canvas, .echarts').length > 0,
-                { timeout: 10000 }
-            );
-            await new Promise(resolve => setTimeout(resolve, 500)); // Buffer para renderização completa
-        } catch (e) {
-            console.log('Gráficos não encontrados ou timeout - continuando...');
-        }
-        
-        // Pausa final para garantir que tudo foi renderizado
-        console.log('Aguardando renderização final...');
-        // Forçar CSS de tela (não de impressão) para manter layout desktop
-        await page.emulateMediaType('screen');
-        
-        // Adicionar CSS para evitar quebras de layout em modo print
-        await page.addStyleTag({ content: `
-            @media print {
-                .no-print-break { break-inside: avoid !important; }
-                .container, .container-fluid { max-width: 100% !important; }
-                .row { display: flex !important; flex-wrap: wrap !important; }
-                .col, .col-* { flex: 1 !important; min-width: 0 !important; }
-            }
-        `});
-        
-        // Aguardar gráficos renderizarem (ApexCharts/ECharts)
-        try {
-            await page.waitForFunction(
-                () => document.querySelectorAll('.apexcharts-canvas, .echarts').length > 0,
-                { timeout: 10000 }
-            );
-            await new Promise(resolve => setTimeout(resolve, 500)); // Buffer para renderização completa
-        } catch (e) {
-            console.log('Gráficos não encontrados ou timeout - continuando...');
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        console.log('Gerando PDF...');
-        
-        // Configurações de PDF melhoradas
-        const pdfOptions = {
-            format: options.format || 'A4',
-            landscape: true,  // Modo paisagem para manter layout de duas colunas
-            printBackground: true,
-            preferCSSPageSize: false,
-            margin: {
-                top: options.marginTop || '10mm',
-                right: options.marginRight || '10mm',
-                bottom: options.marginBottom || '10mm',
-                left: options.marginLeft || '10mm'
-            },
-            displayHeaderFooter: false,
-            scale: options.scale || 1,  // Scale 1 para manter qualidade
-            timeout: 60000
-        };
-        
-        // Gera o PDF com configurações otimizadas
-        const pdfBuffer = await page.pdf(pdfOptions);
-        
-        console.log('PDF gerado com sucesso!');
-        
+
+        await page.setContent(html, { waitUntil: ['networkidle0', 'domcontentloaded'], timeout: 60000 });
+
+        await configurePageForA4(page);
+        await waitForContentLoad(page);
+        await waitForCharts(page);
+
+        const pdfBuffer = await generatePDF(page, options);
+
         res.set({
             'Content-Type': 'application/pdf',
             'Content-Disposition': 'attachment; filename="output.pdf"',
@@ -248,118 +196,47 @@ app.post('/convert', apiKeyAuth, async (req, res) => {
         res.send(pdfBuffer);
 
     } catch (error) {
-        console.error('PDF Generation Error:', error.message);
-        console.error('Stack trace:', error.stack);
-        res.status(500).json({ 
-            success: false, 
-            error: 'Failed to generate PDF.', 
-            details: error.message 
-        });
+        console.error('Erro ao gerar PDF:', error.message);
+        res.status(500).json({ success: false, error: 'Failed to generate PDF.', details: error.message });
     } finally {
-        if (browser) {
-            await browser.close();
-        }
+        if (browser) await browser.close();
     }
 });
 
-// Rota para conversão com download via arquivo (alternativa)
+// --- ROTA /CONVERT-FILE ---
 app.post('/convert-file', apiKeyAuth, async (req, res) => {
     const { html, options = {} } = req.body;
-    if (!html) {
-        return res.status(400).json({ success: false, error: 'HTML is required.' });
-    }
+    if (!html) return res.status(400).json({ success: false, error: 'HTML is required.' });
 
-    let browser = null;
+    let browser;
     try {
         const filename = `${crypto.randomBytes(20).toString('hex')}.pdf`;
         const outputPath = path.join(OUTPUT_DIR, filename);
 
-        // Configurações melhoradas do Puppeteer
         browser = await puppeteer.launch({
             headless: "new",
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-web-security',
-                '--disable-features=VizDisplayCompositor',
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding',
-                '--disable-ipc-flooding-protection',
-                '--font-render-hinting=none'
-            ]
-        });
-        
-        const page = await browser.newPage();
-        
-        await page.setViewport({
-            width: 1600,
-            height: 1000,
-            deviceScaleFactor: 2
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
 
+        const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-        
-        console.log('Definindo conteúdo HTML...');
-        
-        await page.setContent(html, { 
-            waitUntil: ['networkidle0', 'domcontentloaded'], 
-            timeout: 60000 
-        });
-        
-        console.log('HTML definido, aguardando conteúdo dinâmico...');
-        
-        await Promise.race([
-            waitForContentLoad(page),
-            new Promise(resolve => setTimeout(resolve, 10000))
-        ]);
-        
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        console.log('Gerando PDF...');
-        
-        const pdfOptions = {
-            path: outputPath,
-            format: options.format || 'A4',
-            landscape: true,  // Modo paisagem para manter layout de duas colunas
-            printBackground: true,
-            preferCSSPageSize: false,
-            margin: {
-                top: options.marginTop || '10mm',
-                right: options.marginRight || '10mm',
-                bottom: options.marginBottom || '10mm',
-                left: options.marginLeft || '10mm'
-            },
-            displayHeaderFooter: false,
-            scale: options.scale || 1,  // Scale 1 para manter qualidade
-            timeout: 60000
-        };
-        
-        await page.pdf(pdfOptions);
-        
-        console.log(`PDF gerado com sucesso: ${filename}`);
-        
+
+        await page.setContent(html, { waitUntil: ['networkidle0', 'domcontentloaded'], timeout: 60000 });
+
+        await configurePageForA4(page);
+        await waitForContentLoad(page);
+        await waitForCharts(page);
+
+        await generatePDF(page, options, outputPath);
+
         const downloadUrl = `${req.protocol}://${req.get('host')}/download/${filename}`;
-        res.status(200).json({ 
-            success: true, 
-            downloadUrl: downloadUrl, 
-            expiresIn: '1 hour',
-            filename: filename
-        });
+        res.status(200).json({ success: true, downloadUrl, expiresIn: '1 hour', filename });
 
     } catch (error) {
-        console.error('PDF Generation Error:', error.message);
-        console.error('Stack trace:', error.stack);
-        res.status(500).json({ 
-            success: false, 
-            error: 'Failed to generate PDF.', 
-            details: error.message 
-        });
+        console.error('Erro ao gerar PDF:', error.message);
+        res.status(500).json({ success: false, error: 'Failed to generate PDF.', details: error.message });
     } finally {
-        if (browser) {
-            await browser.close();
-        }
+        if (browser) await browser.close();
     }
 });
 
@@ -370,28 +247,22 @@ app.get('/download/:filename', (req, res) => {
     }
     const filePath = path.join(OUTPUT_DIR, filename);
     if (fs.existsSync(filePath)) {
-        res.download(filePath, (err) => {
-            // Remove o arquivo após o download
-            if (fs.existsSync(filePath)) {
-                fs.unlink(filePath, (unlinkErr) => {
-                    if (unlinkErr) console.error(`Failed to delete file after download: ${filename}`, unlinkErr);
-                });
-            }
-            if (err) {
-                console.error(`Error sending file ${filename} to client:`, err);
-            }
+        res.download(filePath, () => {
+            fs.unlink(filePath, (err) => {
+                if (err) console.error(`Erro ao excluir ${filename}:`, err);
+            });
         });
     } else {
         res.status(404).json({ error: 'File not found or has expired.' });
     }
 });
 
-// Rota de status para verificar se a API está funcionando
+// --- STATUS ---
 app.get('/status', (req, res) => {
-    res.json({ 
-        status: 'running', 
+    res.json({
+        status: 'running',
         timestamp: new Date().toISOString(),
-        version: '1.2.0',
+        version: '2.0.0',
         endpoints: {
             '/convert': 'POST - Convert HTML to PDF (direct response)',
             '/convert-file': 'POST - Convert HTML to PDF (file download)',
@@ -401,13 +272,8 @@ app.get('/status', (req, res) => {
     });
 });
 
-// --- INICIALIZAÇÃO DO SERVIDOR ---
+// --- INICIALIZAÇÃO ---
 app.listen(port, () => {
     console.log(`PDF Generation API is running on port ${port}`);
     console.log(`Status endpoint: http://localhost:${port}/status`);
-    console.log('Available endpoints:');
-    console.log('  POST /convert - Convert HTML to PDF (direct response)');
-    console.log('  POST /convert-file - Convert HTML to PDF (file download)');
-    console.log('  GET /download/:filename - Download generated PDF');
-    console.log('  GET /status - API status');
 });
