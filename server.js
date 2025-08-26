@@ -187,8 +187,8 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         
         // Configurar viewport de desktop largo para evitar layout mobile
         await page.setViewport({
-            width: 1600,
-            height: 1000,
+            width: 1080,
+            height: 1920,
             deviceScaleFactor: 2
         });
 
