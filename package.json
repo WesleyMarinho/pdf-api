@@ -1,15 +1,42 @@
 {
-  "name": "pdf-api",
-  "version": "1.0.0",
-  "description": "API for generating PDFs from HTML using Puppeteer.",
-  "main": "server.js",
+  "name": "pdf-generation-api",
+  "version": "1.1.0",
+  "description": "API para geração de PDFs a partir de URLs usando Puppeteer com melhorias de resolução e renderização",
+  "main": "pdf-api-improved.js",
   "scripts": {
-    "start": "node server.js",
-    "test": "echo \"No tests specified\""
+    "start": "node pdf-api-improved.js",
+    "dev": "nodemon pdf-api-improved.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "keywords": [
+    "pdf",
+    "puppeteer",
+    "api",
+    "nodejs",
+    "express",
+    "web-scraping",
+    "pdf-generation"
+  ],
+  "author": "Wesley",
+  "license": "MIT",
   "dependencies": {
-    "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "puppeteer": "^21.5.0"
-  }
+    "puppeteer": "^21.6.1",
+    "dotenv": "^16.3.1",
+    "crypto": "^1.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "."
+  },
+  "bugs": {
+    "url": "."
+  },
+  "homepage": "."
 }
