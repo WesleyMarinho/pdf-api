@@ -140,8 +140,8 @@ app.post('/convert', apiKeyAuth, async (req, res) => {
         
         // Configurações de viewport melhoradas para alta resolução
         await page.setViewport({ 
-            width: 1920, 
-            height: 1080, 
+            width: 720, 
+            height: 1280, 
             deviceScaleFactor: 2 // Melhora a qualidade da renderização
         });
 
