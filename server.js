@@ -69,7 +69,7 @@ const apiKeyAuth = (req, res, next) => {
 // --- ROTAS DA API ---
 
 /**
- * Função auxiliar para rolar a página até o final.
+ * Função auxiliar para rolar a página até o final e aguardar carregamento completo.
  * Isso garante que todos os elementos de lazy-loading sejam acionados.
  * @param {import('puppeteer').Page} page
  */
@@ -85,15 +85,54 @@ async function autoScroll(page) {
 
                 if (totalHeight >= scrollHeight) {
                     clearInterval(timer);
-                    resolve();
+                    // Aguarda um pouco mais para garantir que imagens e conteúdo dinâmico carreguem
+                    setTimeout(resolve, 1000);
                 }
             }, 100);
         });
     });
 }
 
+/**
+ * Aguarda que todos os elementos críticos sejam carregados
+ * @param {import('puppeteer').Page} page
+ */
+async function waitForContentLoad(page) {
+    try {
+        // Aguarda imagens carregarem
+        await page.evaluate(() => {
+            return Promise.all(
+                Array.from(document.images)
+                    .filter(img => !img.complete)
+                    .map(img => new Promise(resolve => {
+                        img.onload = img.onerror = resolve;
+                    }))
+            );
+        });
+
+        // Aguarda fontes carregarem
+        await page.evaluateHandle(() => document.fonts.ready);
+
+        // Aguarda elementos com lazy loading
+        await page.waitForFunction(
+            () => {
+                const lazyElements = document.querySelectorAll('[data-src], [loading="lazy"], .lazy');
+                return Array.from(lazyElements).every(el => {
+                    return el.src || el.style.backgroundImage || el.complete;
+                });
+            },
+            { timeout: 10000 }
+        ).catch(() => {
+            console.log('Timeout aguardando lazy loading, continuando...');
+        });
+
+    } catch (error) {
+        console.log('Erro aguardando carregamento de conteúdo:', error.message);
+    }
+}
+
 app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
-    const { url } = req.body;
+    const { url, options = {} } = req.body;
     if (!url) {
         return res.status(400).json({ success: false, error: 'The "url" property is required in the JSON body.' });
     }
@@ -108,35 +147,106 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         const filename = `${crypto.randomBytes(20).toString('hex')}.pdf`;
         const outputPath = path.join(OUTPUT_DIR, filename);
 
+        // Configurações melhoradas do Puppeteer
         browser = await puppeteer.launch({
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
+                '--disable-ipc-flooding-protection',
+                '--font-render-hinting=none'
+            ]
         });
+        
         const page = await browser.newPage();
         
-        await page.setViewport({ width: 1920, height: 1080 });
-        await page.goto(url, { waitUntil: 'networkidle0', timeout: 90000 });
+        // Configurações de viewport melhoradas para alta resolução
+        await page.setViewport({ 
+            width: 1920, 
+            height: 1080, 
+            deviceScaleFactor: 2 // Melhora a qualidade da renderização
+        });
+
+        // Configurações de user agent e headers
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        
+        // Intercepta requests para otimizar carregamento
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            const resourceType = req.resourceType();
+            // Bloqueia recursos desnecessários para PDF
+            if (['media', 'websocket', 'manifest'].includes(resourceType)) {
+                req.abort();
+            } else {
+                req.continue();
+            }
+        });
+
+        console.log(`Navegando para: ${url}`);
+        
+        // Navega para a página com timeout estendido
+        await page.goto(url, { 
+            waitUntil: ['networkidle0', 'domcontentloaded'], 
+            timeout: 120000 
+        });
+        
+        console.log('Página carregada, aguardando conteúdo dinâmico...');
+        
+        // Aguarda carregamento de conteúdo dinâmico
+        await waitForContentLoad(page);
         
         // Rola a página para carregar todo o conteúdo
         await autoScroll(page);
         
         // Pausa final para garantir que tudo foi renderizado
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 3000));
         
-        // Gera o PDF paginado corretamente
-        await page.pdf({
+        console.log('Gerando PDF...');
+        
+        // Configurações de PDF melhoradas
+        const pdfOptions = {
             path: outputPath,
-            format: 'A4',
+            format: options.format || 'A4',
             printBackground: true,
-            margin: { top: '25px', right: '25px', bottom: '25px', left: '25px' }
-        });
+            preferCSSPageSize: false,
+            margin: {
+                top: options.marginTop || '20px',
+                right: options.marginRight || '20px',
+                bottom: options.marginBottom || '20px',
+                left: options.marginLeft || '20px'
+            },
+            displayHeaderFooter: false,
+            scale: options.scale || 0.8, // Reduz um pouco para caber melhor na página
+            timeout: 60000
+        };
+        
+        // Gera o PDF com configurações otimizadas
+        await page.pdf(pdfOptions);
+        
+        console.log(`PDF gerado com sucesso: ${filename}`);
         
         const downloadUrl = `${req.protocol}://${req.get('host')}/download/${filename}`;
-        res.status(200).json({ success: true, downloadUrl: downloadUrl, expiresIn: '1 hour' });
+        res.status(200).json({ 
+            success: true, 
+            downloadUrl: downloadUrl, 
+            expiresIn: '1 hour',
+            filename: filename
+        });
 
     } catch (error) {
         console.error('PDF Generation Error:', error.message);
-        res.status(500).json({ success: false, error: 'Failed to generate PDF.', details: error.message });
+        console.error('Stack trace:', error.stack);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to generate PDF.', 
+            details: error.message 
+        });
     } finally {
         if (browser) {
             await browser.close();
@@ -152,6 +262,7 @@ app.get('/download/:filename', (req, res) => {
     const filePath = path.join(OUTPUT_DIR, filename);
     if (fs.existsSync(filePath)) {
         res.download(filePath, (err) => {
+            // Remove o arquivo após o download
             if (fs.existsSync(filePath)) {
                 fs.unlink(filePath, (unlinkErr) => {
                     if (unlinkErr) console.error(`Failed to delete file after download: ${filename}`, unlinkErr);
@@ -166,7 +277,17 @@ app.get('/download/:filename', (req, res) => {
     }
 });
 
+// Rota de status para verificar se a API está funcionando
+app.get('/status', (req, res) => {
+    res.json({ 
+        status: 'running', 
+        timestamp: new Date().toISOString(),
+        version: '1.1.0'
+    });
+});
+
 // --- INICIALIZAÇÃO DO SERVIDOR ---
 app.listen(port, () => {
     console.log(`PDF Generation API is running on port ${port}`);
+    console.log(`Status endpoint: http://localhost:${port}/status`);
 });
