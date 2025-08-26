@@ -265,7 +265,7 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         const pdfOptions = {
             path: outputPath,
             format: options.format || 'A4',
-            landscape: true,  // Modo paisagem para manter layout de duas colunas
+            landscape: false,  // Modo paisagem para manter layout de duas colunas
             printBackground: true,
             preferCSSPageSize: false,
             margin: {
