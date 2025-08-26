@@ -166,9 +166,8 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         const filename = `${crypto.randomBytes(20).toString('hex')}.pdf`;
         const outputPath = path.join(OUTPUT_DIR, filename);
 
-        // Configurações melhoradas do Puppeteer
         browser = await puppeteer.launch({
-            headless: "new", // Usa o novo modo headless
+            headless: "new",
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -179,27 +178,29 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
                 '--disable-backgrounding-occluded-windows',
                 '--disable-renderer-backgrounding',
                 '--disable-ipc-flooding-protection',
-                '--font-render-hinting=none'
+                '--font-render-hinting=none',
+                // For better chart rendering in Puppeteer
+                '--enable-features=Vulkan',
             ]
         });
         
         const page = await browser.newPage();
         
-        // Configurar viewport de desktop largo para evitar layout mobile
+        // **IMPORTANT VIEWPORT SETTINGS**
+        // Sets the browser window size for rendering HTML.
+        // This should match your CSS grid (1200px) and a standard screen height.
+        // deviceScaleFactor: 1 ensures 1 CSS pixel = 1 device pixel, matching normal screen behavior.
         await page.setViewport({
-            width: 1200,
-            height: 1000,
-            deviceScaleFactor: 2
+            width: 1200, 
+            height: 1000, // A reasonable height, autoScroll will handle full page
+            deviceScaleFactor: 1 
         });
 
-        // Configurações de user agent e headers
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
         
-        // Intercepta requests para otimizar carregamento
         await page.setRequestInterception(true);
         page.on('request', (req) => {
             const resourceType = req.resourceType();
-            // Bloqueia recursos desnecessários para PDF
             if (['media', 'websocket', 'manifest'].includes(resourceType)) {
                 req.abort();
             } else {
@@ -209,7 +210,6 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
 
         console.log(`Navegando para: ${url}`);
         
-        // Navega para a página com timeout estendido
         await page.goto(url, { 
             waitUntil: ['networkidle0', 'domcontentloaded'], 
             timeout: 120000 
@@ -217,98 +217,54 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         
         console.log('Página carregada, aguardando conteúdo dinâmico...');
         
-        // Aguarda carregamento de conteúdo dinâmico com timeout total
         console.log('Iniciando carregamento de conteúdo dinâmico...');
         await Promise.race([
             waitForContentLoad(page),
-            new Promise(resolve => setTimeout(resolve, 15000)) // 15s timeout total
+            new Promise(resolve => setTimeout(resolve, 15000))
         ]);
         
-        // Rola a página para carregar todo o conteúdo
         console.log('Rolando página para carregar conteúdo...');
         await Promise.race([
             autoScroll(page),
-            new Promise(resolve => setTimeout(resolve, 10000)) // 10s timeout para scroll
+            new Promise(resolve => setTimeout(resolve, 10000))
         ]);
         
-        // Forçar CSS de tela (não de impressão) para manter layout desktop
+        // **CRITICAL FOR "NO @MEDIA PRINT"**: Emulate screen media type.
+        // This tells Puppeteer to use the screen CSS rules, not print CSS.
         await page.emulateMediaType('screen');
         
-        // Adicionar CSS para evitar quebras de layout em modo print
-        await page.addStyleTag({ content: `
-            @media print {
-                .no-print-break { break-inside: avoid !important; }
-                .container, .container-fluid { max-width: 100% !important; }
-                .row { display: flex !important; flex-wrap: wrap !important; }
-                .col, .col-* { flex: 1 !important; min-width: 0 !important; }
-            }
-        `});
+        // No page.addStyleTag with @media print rules as per user's request.
         
-        // Debug: Capturar informações de resolução e DPI
-        const pageInfo = await page.evaluate(() => {
-            return {
-                // Informações da tela/viewport
-                screenWidth: window.screen.width,
-                screenHeight: window.screen.height,
-                viewportWidth: window.innerWidth,
-                viewportHeight: window.innerHeight,
-                documentWidth: document.documentElement.scrollWidth,
-                documentHeight: document.documentElement.scrollHeight,
-                
-                // DPI e densidade de pixels
-                devicePixelRatio: window.devicePixelRatio,
-                dpi: window.devicePixelRatio * 96, // DPI padrão do CSS é 96
-                
-                // Informações de CSS
-                cssPixelRatio: window.devicePixelRatio,
-                
-                // Media queries ativas
-                mediaQueries: {
-                    print: window.matchMedia('print').matches,
-                    screen: window.matchMedia('screen').matches,
-                    minWidth1200: window.matchMedia('(min-width: 1200px)').matches,
-                    minWidth1400: window.matchMedia('(min-width: 1400px)').matches,
-                    minWidth1600: window.matchMedia('(min-width: 1600px)').matches
-                },
-                
-                // User agent
-                userAgent: navigator.userAgent
-            };
-        });
-        
-        console.log('📊 Informações de Resolução e DPI:');
-        console.log('   Viewport Puppeteer: 1600x1000 (configurado)');
-        console.log(`   Viewport da Página: ${pageInfo.viewportWidth}x${pageInfo.viewportHeight}`);
-        console.log(`   Documento Total: ${pageInfo.documentWidth}x${pageInfo.documentHeight}`);
-        console.log(`   Tela: ${pageInfo.screenWidth}x${pageInfo.screenHeight}`);
-        console.log(`   Device Pixel Ratio: ${pageInfo.devicePixelRatio}`);
-        console.log(`   DPI Calculado: ${pageInfo.dpi}`);
-        console.log(`   Media Queries Ativas:`, pageInfo.mediaQueries);
-        
-        // Aguardar gráficos renderizarem (ApexCharts/ECharts)
+        // Wait for charts to render
         try {
+            console.log('Aguardando renderização de gráficos...');
             await page.waitForFunction(
-                () => document.querySelectorAll('.apexcharts-canvas, .echarts').length > 0,
-                { timeout: 10000 }
+                () => {
+                    const apexCharts = document.querySelectorAll('.apexcharts-canvas');
+                    return apexCharts.length > 0 && Array.from(apexCharts).every(chart => chart.offsetWidth > 0 && chart.offsetHeight > 0);
+                },
+                { timeout: 15000 } // Increased timeout for charts
             );
-            await new Promise(resolve => setTimeout(resolve, 500)); // Buffer para renderização completa
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Additional buffer
         } catch (e) {
-            console.log('Gráficos não encontrados ou timeout - continuando...');
+            console.warn('Gráficos ApexCharts não renderizados ou timeout:', e.message);
         }
         
-        // Pausa final para garantir que tudo foi renderizado
         console.log('Aguardando renderização final...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
+        await new Promise(resolve => setTimeout(resolve, 3000)); // Final pause for stability
+
         console.log('Gerando PDF...');
         
-        // Configurações de PDF melhoradas
+        // **PDF OPTIONS**
+        // format: 'A4' and landscape: true are standard for reports.
+        // preferCSSPageSize: false ensures Puppeteer uses its own page sizing logic
+        // scale: 1 ensures the content is not zoomed in/out, matching viewport CSS pixels.
         const pdfOptions = {
             path: outputPath,
             format: options.format || 'A4',
-            landscape: true,  // Modo paisagem para manter layout de duas colunas
+            landscape: true,  
             printBackground: true,
-            preferCSSPageSize: false,
+            preferCSSPageSize: false, 
             margin: {
                 top: options.marginTop || '10mm',
                 right: options.marginRight || '10mm',
@@ -316,11 +272,10 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
                 left: options.marginLeft || '10mm'
             },
             displayHeaderFooter: false,
-            scale: 1,  // Scale 1 para manter qualidade
-            timeout: 60000
+            scale: 1,  
+            timeout: 90000 // Increased timeout for PDF generation
         };
         
-        // Gera o PDF com configurações otimizadas
         await page.pdf(pdfOptions);
         
         console.log(`PDF gerado com sucesso: ${filename}`);
@@ -356,7 +311,6 @@ app.get('/download/:filename', (req, res) => {
     const filePath = path.join(OUTPUT_DIR, filename);
     if (fs.existsSync(filePath)) {
         res.download(filePath, (err) => {
-            // Remove o arquivo após o download
             if (fs.existsSync(filePath)) {
                 fs.unlink(filePath, (unlinkErr) => {
                     if (unlinkErr) console.error(`Failed to delete file after download: ${filename}`, unlinkErr);
@@ -371,159 +325,19 @@ app.get('/download/:filename', (req, res) => {
     }
 });
 
-// Endpoint de status da API
 app.get('/status', (req, res) => {
     res.json({
         status: 'running',
         timestamp: new Date().toISOString(),
-        version: '1.1.0',
+        version: '1.2.0',
         endpoints: {
-            'POST /generate-pdf': 'Gera PDF a partir de URL',
-            'POST /debug-page': 'Debug de resolução e DPI da página',
-            'GET /download/:filename': 'Download de PDF gerado',
-            'GET /status': 'Status da API'
+            'POST /generate-pdf': 'Generates PDF from URL',
+            'GET /download/:filename': 'Downloads generated PDF',
+            'GET /status': 'API Status'
         }
     });
 });
 
-// Endpoint de debug para capturar informações de resolução
-app.post('/debug-page', apiKeyAuth, async (req, res) => {
-    const { url } = req.body;
-    
-    if (!url) {
-        return res.status(400).json({ error: 'URL é obrigatória' });
-    }
-    
-    let browser;
-    try {
-        console.log(`🔍 Debug da página: ${url}`);
-        
-        browser = await puppeteer.launch({
-            headless: "new",
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',
-                '--disable-gpu'
-            ]
-        });
-        
-        const page = await browser.newPage();
-        
-        // Configurar viewport de desktop largo
-        await page.setViewport({
-            width: 1600,
-            height: 1000,
-            deviceScaleFactor: 2
-        });
-        
-        // Navegar para a página
-        await page.goto(url, { waitUntil: 'networkidle0', timeout: 120000 });
-        
-        // Forçar CSS de tela
-        await page.emulateMediaType('screen');
-        
-        // Aguardar carregamento
-        await page.waitForTimeout(3000);
-        
-        // Capturar informações detalhadas
-        const debugInfo = await page.evaluate(() => {
-            return {
-                // Configurações do Puppeteer
-                puppeteerViewport: { width: 1600, height: 1000, deviceScaleFactor: 2 },
-                
-                // Informações da página
-                pageInfo: {
-                    screenWidth: window.screen.width,
-                    screenHeight: window.screen.height,
-                    viewportWidth: window.innerWidth,
-                    viewportHeight: window.innerHeight,
-                    documentWidth: document.documentElement.scrollWidth,
-                    documentHeight: document.documentElement.scrollHeight,
-                    bodyWidth: document.body.scrollWidth,
-                    bodyHeight: document.body.scrollHeight
-                },
-                
-                // DPI e densidade
-                dpiInfo: {
-                    devicePixelRatio: window.devicePixelRatio,
-                    dpiCalculated: window.devicePixelRatio * 96,
-                    cssPixelRatio: window.devicePixelRatio
-                },
-                
-                // Media queries
-                mediaQueries: {
-                    print: window.matchMedia('print').matches,
-                    screen: window.matchMedia('screen').matches,
-                    minWidth576: window.matchMedia('(min-width: 576px)').matches,
-                    minWidth768: window.matchMedia('(min-width: 768px)').matches,
-                    minWidth992: window.matchMedia('(min-width: 992px)').matches,
-                    minWidth1200: window.matchMedia('(min-width: 1200px)').matches,
-                    minWidth1400: window.matchMedia('(min-width: 1400px)').matches,
-                    minWidth1600: window.matchMedia('(min-width: 1600px)').matches,
-                    maxWidth767: window.matchMedia('(max-width: 767px)').matches,
-                    maxWidth991: window.matchMedia('(max-width: 991px)').matches
-                },
-                
-                // Informações do navegador
-                browserInfo: {
-                    userAgent: navigator.userAgent,
-                    platform: navigator.platform,
-                    language: navigator.language
-                },
-                
-                // CSS computado de elementos importantes
-                elementsInfo: (() => {
-                    const container = document.querySelector('.container, .container-fluid');
-                    const row = document.querySelector('.row');
-                    const cols = document.querySelectorAll('[class*="col-"]');
-                    
-                    return {
-                        containerWidth: container ? getComputedStyle(container).width : 'não encontrado',
-                        containerMaxWidth: container ? getComputedStyle(container).maxWidth : 'não encontrado',
-                        rowDisplay: row ? getComputedStyle(row).display : 'não encontrado',
-                        colsCount: cols.length,
-                        firstColWidth: cols[0] ? getComputedStyle(cols[0]).width : 'não encontrado'
-                    };
-                })()
-            };
-        });
-        
-        await browser.close();
-        
-        res.json({
-            success: true,
-            url: url,
-            timestamp: new Date().toISOString(),
-            debugInfo: debugInfo,
-            recommendations: {
-                cssAdjustments: [
-                    'Para ajustar o CSS, use as informações de viewport e media queries',
-                    `Viewport atual: ${debugInfo.pageInfo.viewportWidth}x${debugInfo.pageInfo.viewportHeight}`,
-                    `DPI: ${debugInfo.dpiInfo.dpiCalculated}`,
-                    'Media queries ativas mostram quais breakpoints estão funcionando'
-                ],
-                pdfSettings: {
-                    recommendedViewport: { width: 1200, height: 1000, deviceScaleFactor: 2 },
-                    recommendedFormat: 'A4',
-                    recommendedLandscape: true,
-                    recommendedScale: 1
-                }
-            }
-        });
-        
-    } catch (error) {
-        if (browser) await browser.close();
-        console.error('Erro no debug:', error);
-        res.status(500).json({ error: 'Erro ao fazer debug da página', details: error.message });
-    }
-});
-
-// --- INICIALIZAÇÃO DO SERVIDOR ---
 app.listen(port, () => {
     console.log(`PDF Generation API is running on port ${port}`);
     console.log(`Status endpoint: http://localhost:${port}/status`);
