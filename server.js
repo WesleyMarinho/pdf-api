@@ -508,7 +508,7 @@ app.post('/debug-page', apiKeyAuth, async (req, res) => {
                     'Media queries ativas mostram quais breakpoints estão funcionando'
                 ],
                 pdfSettings: {
-                    recommendedViewport: { width: 1600, height: 1000, deviceScaleFactor: 2 },
+                    recommendedViewport: { width: 1200, height: 1000, deviceScaleFactor: 2 },
                     recommendedFormat: 'A4',
                     recommendedLandscape: true,
                     recommendedScale: 1
