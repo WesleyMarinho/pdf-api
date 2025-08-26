@@ -85,7 +85,6 @@ async function autoScroll(page) {
 
                 if (totalHeight >= scrollHeight) {
                     clearInterval(timer);
-                    // Aguarda um pouco mais para garantir que imagens e conteúdo dinâmico carreguem
                     setTimeout(resolve, 1000);
                 }
             }, 100);
