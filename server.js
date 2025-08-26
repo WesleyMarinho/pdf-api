@@ -99,32 +99,51 @@ async function autoScroll(page) {
  */
 async function waitForContentLoad(page) {
     try {
-        // Aguarda imagens carregarem
-        await page.evaluate(() => {
-            return Promise.all(
-                Array.from(document.images)
-                    .filter(img => !img.complete)
-                    .map(img => new Promise(resolve => {
-                        img.onload = img.onerror = resolve;
-                    }))
-            );
-        });
+        console.log('Aguardando carregamento de imagens...');
+        // Aguarda imagens carregarem com timeout
+        await Promise.race([
+            page.evaluate(() => {
+                return Promise.all(
+                    Array.from(document.images)
+                        .filter(img => !img.complete)
+                        .map(img => new Promise(resolve => {
+                            const timeout = setTimeout(() => resolve(), 3000); // 3s timeout por imagem
+                            img.onload = img.onerror = () => {
+                                clearTimeout(timeout);
+                                resolve();
+                            };
+                        }))
+                );
+            }),
+            new Promise(resolve => setTimeout(resolve, 8000)) // 8s timeout total
+        ]);
 
-        // Aguarda fontes carregarem
-        await page.evaluateHandle(() => document.fonts.ready);
+        console.log('Aguardando carregamento de fontes...');
+        // Aguarda fontes carregarem com timeout
+        await Promise.race([
+            page.evaluateHandle(() => document.fonts.ready),
+            new Promise(resolve => setTimeout(resolve, 5000)) // 5s timeout
+        ]);
 
-        // Aguarda elementos com lazy loading
-        await page.waitForFunction(
-            () => {
-                const lazyElements = document.querySelectorAll('[data-src], [loading="lazy"], .lazy');
-                return Array.from(lazyElements).every(el => {
-                    return el.src || el.style.backgroundImage || el.complete;
-                });
-            },
-            { timeout: 10000 }
-        ).catch(() => {
+        console.log('Verificando elementos lazy loading...');
+        // Aguarda elementos com lazy loading com timeout reduzido
+        await Promise.race([
+            page.waitForFunction(
+                () => {
+                    const lazyElements = document.querySelectorAll('[data-src], [loading="lazy"], .lazy');
+                    if (lazyElements.length === 0) return true;
+                    return Array.from(lazyElements).every(el => {
+                        return el.src || el.style.backgroundImage || el.complete;
+                    });
+                },
+                { timeout: 5000 }
+            ),
+            new Promise(resolve => setTimeout(resolve, 5000)) // 5s timeout
+        ]).catch(() => {
             console.log('Timeout aguardando lazy loading, continuando...');
         });
+
+        console.log('Carregamento de conteúdo concluído.');
 
     } catch (error) {
         console.log('Erro aguardando carregamento de conteúdo:', error.message);
@@ -149,7 +168,7 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
 
         // Configurações melhoradas do Puppeteer
         browser = await puppeteer.launch({
-            headless: true,
+            headless: "new", // Usa o novo modo headless
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -198,14 +217,23 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         
         console.log('Página carregada, aguardando conteúdo dinâmico...');
         
-        // Aguarda carregamento de conteúdo dinâmico
-        await waitForContentLoad(page);
+        // Aguarda carregamento de conteúdo dinâmico com timeout total
+        console.log('Iniciando carregamento de conteúdo dinâmico...');
+        await Promise.race([
+            waitForContentLoad(page),
+            new Promise(resolve => setTimeout(resolve, 15000)) // 15s timeout total
+        ]);
         
         // Rola a página para carregar todo o conteúdo
-        await autoScroll(page);
+        console.log('Rolando página para carregar conteúdo...');
+        await Promise.race([
+            autoScroll(page),
+            new Promise(resolve => setTimeout(resolve, 10000)) // 10s timeout para scroll
+        ]);
         
         // Pausa final para garantir que tudo foi renderizado
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        console.log('Aguardando renderização final...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
         console.log('Gerando PDF...');
         
