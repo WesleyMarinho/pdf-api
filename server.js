@@ -186,8 +186,8 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         
         // Configurações de viewport melhoradas para alta resolução
         await page.setViewport({ 
-            width: 1280, 
-            height: 720, 
+            width: 720, 
+            height: 1280, 
             deviceScaleFactor: 2 // Melhora a qualidade da renderização
         });
 
