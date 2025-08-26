@@ -85,6 +85,7 @@ async function autoScroll(page) {
 
                 if (totalHeight >= scrollHeight) {
                     clearInterval(timer);
+                    // Aguarda um pouco mais para garantir que imagens e conteúdo dinâmico carreguem
                     setTimeout(resolve, 1000);
                 }
             }, 100);
@@ -184,11 +185,11 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         
         const page = await browser.newPage();
         
-        // Configurações de viewport melhoradas para alta resolução
-        await page.setViewport({ 
-            width: 1080, 
-            height: 1920, 
-            deviceScaleFactor: 2 // Melhora a qualidade da renderização
+        // Configurar viewport de desktop largo para evitar layout mobile
+        await page.setViewport({
+            width: 1600,
+            height: 1000,
+            deviceScaleFactor: 2
         });
 
         // Configurações de user agent e headers
@@ -230,6 +231,30 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
             new Promise(resolve => setTimeout(resolve, 10000)) // 10s timeout para scroll
         ]);
         
+        // Forçar CSS de tela (não de impressão) para manter layout desktop
+        await page.emulateMediaType('screen');
+        
+        // Adicionar CSS para evitar quebras de layout em modo print
+        await page.addStyleTag({ content: `
+            @media print {
+                .no-print-break { break-inside: avoid !important; }
+                .container, .container-fluid { max-width: 100% !important; }
+                .row { display: flex !important; flex-wrap: wrap !important; }
+                .col, .col-* { flex: 1 !important; min-width: 0 !important; }
+            }
+        `});
+        
+        // Aguardar gráficos renderizarem (ApexCharts/ECharts)
+        try {
+            await page.waitForFunction(
+                () => document.querySelectorAll('.apexcharts-canvas, .echarts').length > 0,
+                { timeout: 10000 }
+            );
+            await new Promise(resolve => setTimeout(resolve, 500)); // Buffer para renderização completa
+        } catch (e) {
+            console.log('Gráficos não encontrados ou timeout - continuando...');
+        }
+        
         // Pausa final para garantir que tudo foi renderizado
         console.log('Aguardando renderização final...');
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -240,16 +265,17 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         const pdfOptions = {
             path: outputPath,
             format: options.format || 'A4',
+            landscape: true,  // Modo paisagem para manter layout de duas colunas
             printBackground: true,
             preferCSSPageSize: false,
             margin: {
-                top: options.marginTop || '20px',
-                right: options.marginRight || '20px',
-                bottom: options.marginBottom || '20px',
-                left: options.marginLeft || '20px'
+                top: options.marginTop || '10mm',
+                right: options.marginRight || '10mm',
+                bottom: options.marginBottom || '10mm',
+                left: options.marginLeft || '10mm'
             },
             displayHeaderFooter: false,
-            scale: options.scale || 0.8, // Reduz um pouco para caber melhor na página
+            scale: 1,  // Scale 1 para manter qualidade
             timeout: 60000
         };
         
