@@ -10,11 +10,12 @@ const { URL } = require('url');
 
 const app = express();
 
-// --- CONFIGURAÇÃO ---
+// --- CONFIGURAÇÃO --- 
 const port = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY;
 const OUTPUT_DIR = path.join(__dirname, 'generated_pdfs');
-const FILE_EXPIRATION_MS = 3600000; // 1 hora
+const FILE_EXPIRATION_HOURS = process.env.FILE_EXPIRATION_HOURS || 1;
+const FILE_EXPIRATION_MS = FILE_EXPIRATION_HOURS * 60 * 60 * 1000;
 const CLEANUP_INTERVAL_MS = 900000; // 15 minutos
 
 // --- INICIALIZAÇÃO ---
@@ -64,6 +65,23 @@ const apiKeyAuth = (req, res, next) => {
 };
 
 // --- FUNÇÕES AUXILIARES ---
+
+/**
+ * Formata o tempo restante em formato legível
+ * @param {number} timeRemainingMs - Tempo restante em milissegundos
+ * @returns {string} - Tempo formatado (ex: "45 minutes", "2 hours")
+ */
+function formatTimeRemaining(timeRemainingMs) {
+    if (timeRemainingMs <= 0) return 'Expired';
+    
+    const hours = Math.floor(timeRemainingMs / (1000 * 60 * 60));
+    const minutes = Math.floor((timeRemainingMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) {
+        return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    }
+    return `${minutes}m`;
+}
 
 /**
  * Aguarda que todas as imagens sejam carregadas completamente
@@ -465,17 +483,57 @@ app.get('/download/:filename', (req, res) => {
     const filePath = path.join(OUTPUT_DIR, filename);
     if (fs.existsSync(filePath)) {
         res.download(filePath, (err) => {
-            if (fs.existsSync(filePath)) {
-                fs.unlink(filePath, (unlinkErr) => {
-                    if (unlinkErr) console.error(`Failed to delete file after download: ${filename}`, unlinkErr);
-                });
-            }
             if (err) {
                 console.error(`Error sending file ${filename} to client:`, err);
             }
         });
     } else {
         res.status(404).json({ error: 'File not found or has expired.' });
+    }
+});
+
+app.get('/files', apiKeyAuth, (req, res) => {
+    try {
+        const files = fs.readdirSync(OUTPUT_DIR);
+        const fileInfos = files.map(filename => {
+            const filePath = path.join(OUTPUT_DIR, filename);
+            const stats = fs.statSync(filePath);
+            const createdAt = stats.mtime;
+            const expiresAt = new Date(createdAt.getTime() + FILE_EXPIRATION_MS);
+            const timeRemaining = expiresAt.getTime() - Date.now();
+            const isExpired = timeRemaining <= 0;
+            
+            return {
+                filename: filename,
+                createdAt: createdAt.toISOString(),
+                expiresAt: expiresAt.toISOString(),
+                status: isExpired ? 'expired' : 'active',
+                downloadUrl: `${req.protocol}://${req.get('host')}/download/${filename}`,
+                timeRemaining: formatTimeRemaining(timeRemaining)
+            };
+        });
+
+        const activeFiles = fileInfos.filter(file => file.status === 'active');
+        const expiredFiles = fileInfos.filter(file => file.status === 'expired');
+
+        res.json({
+            success: true,
+            files: fileInfos,
+            totalFiles: fileInfos.length,
+            activeFiles: activeFiles.length,
+            expiredFiles: expiredFiles.length,
+            expirationSettings: {
+                expirationHours: FILE_EXPIRATION_HOURS,
+                cleanupIntervalMinutes: CLEANUP_INTERVAL_MS / (1000 * 60)
+            }
+        });
+    } catch (error) {
+        console.error('Error listing files:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to list files',
+            details: error.message
+        });
     }
 });
 
@@ -489,6 +547,7 @@ app.get('/status', (req, res) => {
             'POST /generate-pdf': 'Gera PDF com imagens e gráficos',
             'POST /debug-page': 'Debug de página',
             'GET /download/:filename': 'Download de PDF',
+            'GET /files': 'Lista arquivos disponíveis e horários de expiração',
             'GET /status': 'Status da API'
         }
     });
