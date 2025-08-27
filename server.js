@@ -22,9 +22,6 @@ if (!fs.existsSync(OUTPUT_DIR)) {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 }
 
-/**
- * Função de limpeza: varre o diretório de PDFs e apaga arquivos mais velhos que FILE_EXPIRATION_MS.
- */
 const cleanupOldFiles = () => {
     fs.readdir(OUTPUT_DIR, (err, files) => {
         if (err) {
@@ -69,51 +66,88 @@ const apiKeyAuth = (req, res, next) => {
 // --- FUNÇÕES AUXILIARES ---
 
 /**
- * Função auxiliar para rolar a página até o final e aguardar carregamento completo.
+ * Aguarda que todas as imagens sejam carregadas completamente
  * @param {import('puppeteer').Page} page
  */
-async function autoScroll(page) {
-    await page.evaluate(async () => {
-        await new Promise((resolve) => {
-            let totalHeight = 0;
-            const distance = 100;
-            const timer = setInterval(() => {
-                const scrollHeight = document.body.scrollHeight;
-                window.scrollBy(0, distance);
-                totalHeight += distance;
+async function waitForImagesLoad(page) {
+    console.log('Aguardando carregamento completo das imagens...');
+    
+    await page.evaluate(() => {
+        return new Promise((resolve) => {
+            const images = Array.from(document.querySelectorAll('img'));
+            if (images.length === 0) {
+                resolve();
+                return;
+            }
 
-                if (totalHeight >= scrollHeight) {
-                    clearInterval(timer);
-                    setTimeout(resolve, 1000);
+            let loadedImages = 0;
+            const totalImages = images.length;
+            
+            console.log(`Total de imagens encontradas: ${totalImages}`);
+
+            const checkComplete = () => {
+                loadedImages++;
+                console.log(`Imagem carregada: ${loadedImages}/${totalImages}`);
+                
+                if (loadedImages === totalImages) {
+                    console.log('Todas as imagens foram carregadas');
+                    resolve();
                 }
-            }, 100);
+            };
+
+            images.forEach((img, index) => {
+                if (img.complete && img.naturalWidth > 0) {
+                    console.log(`Imagem ${index + 1} já carregada: ${img.src}`);
+                    checkComplete();
+                } else {
+                    console.log(`Aguardando carregamento da imagem ${index + 1}: ${img.src}`);
+                    
+                    const onLoad = () => {
+                        console.log(`Imagem ${index + 1} carregou com sucesso`);
+                        img.removeEventListener('load', onLoad);
+                        img.removeEventListener('error', onError);
+                        checkComplete();
+                    };
+
+                    const onError = () => {
+                        console.warn(`Falha ao carregar imagem ${index + 1}: ${img.src}`);
+                        img.removeEventListener('load', onLoad);
+                        img.removeEventListener('error', onError);
+                        checkComplete(); // Conta como carregada mesmo com erro
+                    };
+
+                    img.addEventListener('load', onLoad);
+                    img.addEventListener('error', onError);
+
+                    // Força recarregamento se necessário
+                    if (img.src) {
+                        const currentSrc = img.src;
+                        img.src = '';
+                        img.src = currentSrc;
+                    }
+                }
+            });
+
+            // Timeout de segurança
+            setTimeout(() => {
+                console.log('Timeout no carregamento de imagens, continuando...');
+                resolve();
+            }, 15000);
         });
     });
 }
 
 /**
- * Aguarda que todos os elementos críticos sejam carregados, com foco especial em gráficos
+ * Aguarda que todos os elementos críticos sejam carregados
  * @param {import('puppeteer').Page} page
  */
 async function waitForContentLoad(page) {
     try {
-        console.log('Aguardando carregamento de imagens...');
-        await Promise.race([
-            page.evaluate(() => {
-                return Promise.all(
-                    Array.from(document.images)
-                        .filter(img => !img.complete)
-                        .map(img => new Promise(resolve => {
-                            const timeout = setTimeout(() => resolve(), 3000);
-                            img.onload = img.onerror = () => {
-                                clearTimeout(timeout);
-                                resolve();
-                            };
-                        }))
-                );
-            }),
-            new Promise(resolve => setTimeout(resolve, 8000))
-        ]);
+        // Aguarda carregamento básico da página
+        await page.waitForLoadState?.('networkidle') || new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Aguarda imagens carregarem
+        await waitForImagesLoad(page);
 
         console.log('Aguardando carregamento de fontes...');
         await Promise.race([
@@ -127,10 +161,8 @@ async function waitForContentLoad(page) {
             { timeout: 10000 }
         ).catch(() => console.log('ApexCharts não encontrado, continuando...'));
 
-        console.log('Forçando inicialização e re-renderização dos gráficos...');
-        // Múltiplas tentativas de inicialização para garantir que os gráficos renderizem
+        console.log('Forçando inicialização dos gráficos...');
         await page.evaluate(() => {
-            // Primeira tentativa - usando o objeto Reports global
             if (window.Reports && typeof window.Reports.init === 'function') {
                 console.log('Inicializando via Reports.init()');
                 try {
@@ -140,7 +172,6 @@ async function waitForContentLoad(page) {
                 }
             }
 
-            // Segunda tentativa - configuração global para todos os gráficos
             if (window.ApexCharts) {
                 console.log('Configurando Apex global');
                 window.Apex = {
@@ -170,9 +201,7 @@ async function waitForContentLoad(page) {
                 };
             }
 
-            // Terceira tentativa - forçar re-render individual de cada gráfico
             if (window.ApexCharts && window.Reports) {
-                console.log('Forçando re-render individual dos gráficos');
                 setTimeout(() => {
                     try {
                         window.Reports.initializeAllCharts();
@@ -180,73 +209,31 @@ async function waitForContentLoad(page) {
                     } catch (e) {
                         console.error('Erro na re-inicialização:', e);
                     }
-                }, 500);
+                }, 1000);
             }
         });
 
-        // Aguarda renderização inicial
-        console.log('Aguardando renderização inicial dos gráficos...');
-        await new Promise(resolve => setTimeout(resolve, 4000));
+        // Aguarda renderização dos gráficos
+        console.log('Aguardando renderização dos gráficos...');
+        await new Promise(resolve => setTimeout(resolve, 5000));
 
-        // Verificação e nova tentativa se necessário
-        const chartsRendered = await page.evaluate(() => {
+        // Verificação final
+        const allLoaded = await page.evaluate(() => {
+            // Verifica imagens
+            const images = Array.from(document.querySelectorAll('img'));
+            const imagesLoaded = images.every(img => img.complete && img.naturalWidth > 0);
+            
+            // Verifica gráficos
             const charts = document.querySelectorAll('.apexcharts-canvas svg');
-            if (charts.length === 0) return true;
-
-            let renderedCount = 0;
-            charts.forEach(svg => {
-                const hasContent = svg.querySelector('g.apexcharts-series path, g.apexcharts-series rect, g.apexcharts-heatmap-series rect');
-                if (hasContent) renderedCount++;
+            const chartsRendered = charts.length === 0 || Array.from(charts).some(svg => {
+                return svg.querySelector('g.apexcharts-series path, g.apexcharts-series rect, g.apexcharts-heatmap-series rect');
             });
 
-            console.log(`Gráficos encontrados: ${charts.length}, Renderizados: ${renderedCount}`);
-            return renderedCount > 0 || charts.length === 0;
+            console.log(`Imagens carregadas: ${imagesLoaded}, Gráficos renderizados: ${chartsRendered}`);
+            return imagesLoaded && chartsRendered;
         });
 
-        if (!chartsRendered) {
-            console.log('Tentativa adicional de renderização...');
-            await page.evaluate(() => {
-                // Última tentativa - força todos os gráficos via jQuery se disponível
-                if (window.$ && window.Reports) {
-                    try {
-                        window.Reports.initializeAllCharts();
-                        window.Reports.initializeMiniCharts();
-                    } catch (e) {
-                        console.error('Erro na última tentativa:', e);
-                    }
-                }
-                
-                // Força re-layout manual se necessário
-                const charts = document.querySelectorAll('.apexcharts-canvas');
-                charts.forEach(chart => {
-                    const svg = chart.querySelector('svg');
-                    if (svg) {
-                        svg.style.maxWidth = '100%';
-                        svg.style.width = '100%';
-                    }
-                });
-            });
-            await new Promise(resolve => setTimeout(resolve, 3000));
-        }
-
-        console.log('Verificando lazy loading elements...');
-        await Promise.race([
-            page.waitForFunction(
-                () => {
-                    const lazyElements = document.querySelectorAll('[data-src], [loading="lazy"], .lazy');
-                    if (lazyElements.length === 0) return true;
-                    return Array.from(lazyElements).every(el => {
-                        return el.src || el.style.backgroundImage || el.complete;
-                    });
-                },
-                { timeout: 3000 }
-            ),
-            new Promise(resolve => setTimeout(resolve, 3000))
-        ]).catch(() => {
-            console.log('Timeout aguardando lazy loading, continuando...');
-        });
-
-        console.log('Carregamento de conteúdo concluído.');
+        console.log(`Carregamento concluído: ${allLoaded ? 'Sucesso' : 'Parcial'}`);
 
     } catch (error) {
         console.log('Erro aguardando carregamento de conteúdo:', error.message);
@@ -283,69 +270,70 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
                 '--disable-background-timer-throttling', 
                 '--disable-backgrounding-occluded-windows',
                 '--disable-renderer-backgrounding', 
-                '--disable-ipc-flooding-protection',
                 '--font-render-hinting=medium',
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
-                '--no-zygote',
-                '--single-process',
-                '--disable-gpu'
+                '--disable-gpu',
+                // Parâmetros específicos para melhor carregamento de imagens
+                '--disable-lazy-loading',
+                '--disable-background-media-suspend',
+                '--autoplay-policy=no-user-gesture-required'
             ]
         });
         
         const page = await browser.newPage();
 
-        // Capturar erros do console da página
-        page.on('console', msg => {
-            if (msg.type() === 'error') {
-                console.error(`[Browser Console ERROR]: ${msg.text()}`);
-            } else if (msg.type() === 'log') {
-                console.log(`[Browser Console LOG]: ${msg.text()}`);
+        // Intercepta apenas recursos desnecessários (mantém imagens)
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            const resourceType = req.resourceType();
+            const url = req.url();
+            
+            // Bloqueia apenas recursos realmente desnecessários
+            if (resourceType === 'websocket' || 
+                resourceType === 'manifest' ||
+                url.includes('/ads/') ||
+                url.includes('google-analytics') ||
+                url.includes('googletagmanager') ||
+                url.includes('facebook.com/tr') ||
+                url.includes('doubleclick.net')) {
+                req.abort();
+            } else {
+                // Permite imagens e outros recursos importantes
+                req.continue();
             }
         });
-        
+
+        // Captura logs para debug
+        page.on('console', msg => {
+            const type = msg.type();
+            if (type === 'error') {
+                console.error(`[Browser Console ERROR]: ${msg.text()}`);
+            } else if (type === 'log' && msg.text().includes('Imagem')) {
+                console.log(`[Browser Image LOG]: ${msg.text()}`);
+            }
+        });
+
+        // Configura viewport e user agent
         await page.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 2 });
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
         
-        await page.setRequestInterception(true);
-        page.on('request', (req) => {
-            if (['media', 'websocket', 'manifest'].includes(req.resourceType())) req.abort();
-            else req.continue();
-        });
-
         console.log(`Navegando para: ${url}`);
-        await page.goto(url, { waitUntil: 'networkidle0', timeout: 120000 });
+        await page.goto(url, { 
+            waitUntil: ['networkidle0', 'domcontentloaded'], 
+            timeout: 120000 
+        });
         
-        console.log('Página carregada, iniciando processamento para PDF...');
+        console.log('Página carregada, processando conteúdo...');
 
         // Força CSS de tela
         await page.emulateMediaType('screen');
 
-        // Aguarda carregamento de conteúdo dinâmico
+        // Aguarda carregamento completo do conteúdo
         await Promise.race([
             waitForContentLoad(page),
-            new Promise(resolve => setTimeout(resolve, 20000))
+            new Promise(resolve => setTimeout(resolve, 25000))
         ]);
-        
-        // Aguardar gráficos renderizarem com verificação robusta
-        try {
-            console.log('Verificação final dos gráficos renderizados...');
-            await page.waitForFunction(
-                () => {
-                    const chartElements = document.querySelectorAll('.apexcharts-canvas');
-                    if (chartElements.length === 0) return true; 
-                    
-                    // Verifica se há pelo menos um elemento gráfico renderizado
-                    return Array.from(chartElements).some(el => {
-                        return el.querySelector('svg g.apexcharts-series path, svg g.apexcharts-series rect, svg g.apexcharts-heatmap-series rect');
-                    });
-                },
-                { timeout: 15000 }
-            );
-            console.log('Gráficos verificados e renderizados.');
-        } catch (e) {
-            console.log('Timeout na verificação final dos gráficos, continuando...');
-        }
         
         console.log('Aplicando correções finais de CSS...');
         await page.addStyleTag({
@@ -365,50 +353,39 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
                     box-sizing: border-box !important;
                 }
                 
-                .apexcharts-legend {
+                /* Garante que imagens sejam exibidas corretamente */
+                img {
                     max-width: 100% !important;
-                    overflow: hidden !important;
-                    font-size: 12px !important;
+                    height: auto !important;
+                    display: block !important;
                 }
                 
-                .apexcharts-legend-series {
-                    max-width: calc(100% / 4) !important;
-                    overflow: hidden !important;
-                    text-overflow: ellipsis !important;
-                    white-space: nowrap !important;
-                }
-                
-                /* Força contenção em todos os containers */
-                .grid, .card, .card-content {
-                    overflow: hidden !important;
-                    box-sizing: border-box !important;
-                    max-width: 100% !important;
-                }
-                
-                /* Ajustes específicos para mini gráficos */
-                .mini-chart {
-                    max-width: 250px !important;
-                    overflow: hidden !important;
-                    box-sizing: border-box !important;
-                }
-                
-                .mini-chart .apexcharts-canvas,
-                .mini-chart svg.apexcharts-svg {
-                    max-width: 100% !important;
+                .post-thumbnail img,
+                .profile-avatar-large img,
+                .post-card-img {
+                    object-fit: cover !important;
                     width: 100% !important;
+                    height: 100% !important;
                 }
                 
-                /* Correções para tooltips */
-                .apexcharts-tooltip {
-                    max-width: 200px !important;
-                    word-wrap: break-word !important;
+                /* Força exibição de imagens que podem estar ocultas */
+                [loading="lazy"] {
+                    loading: eager !important;
                 }
             `
         });
 
-        // Força uma última verificação e ajuste de tamanhos
+        // Força ajustes finais
         await page.evaluate(() => {
-            // Ajusta manualmente qualquer elemento que esteja estourando
+            // Força exibição de imagens lazy
+            document.querySelectorAll('img[loading="lazy"]').forEach(img => {
+                img.loading = 'eager';
+                if (img.dataset.src) {
+                    img.src = img.dataset.src;
+                }
+            });
+
+            // Ajusta gráficos
             const charts = document.querySelectorAll('.apexcharts-canvas');
             charts.forEach(chart => {
                 const svg = chart.querySelector('svg');
@@ -418,8 +395,7 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
                     svg.style.height = 'auto';
                 }
             });
-            
-            // Força re-layout se a função existir
+
             if (window.Reports && typeof window.Reports.forceChartResize === 'function') {
                 try {
                     window.Reports.forceChartResize();
@@ -435,7 +411,7 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         console.log('Gerando PDF...');
         
         const isLandscape = typeof landscape === 'boolean' ? landscape : true;
-        console.log(`Modo de orientação definido para: ${isLandscape ? 'Paisagem (Landscape)' : 'Retrato (Portrait)'}`);
+        console.log(`Modo de orientação: ${isLandscape ? 'Paisagem' : 'Retrato'}`);
 
         const pdfOptions = {
             path: outputPath,
@@ -448,8 +424,8 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
                 bottom: '10mm', 
                 left: '10mm' 
             },
-            scale: 0.9, // Escala reduzida para evitar overflow
-            timeout: 60000,
+            scale: 0.9,
+            timeout: 90000, // Timeout maior para imagens
             preferCSSPageSize: true,
             displayHeaderFooter: false
         };
@@ -489,7 +465,6 @@ app.get('/download/:filename', (req, res) => {
     const filePath = path.join(OUTPUT_DIR, filename);
     if (fs.existsSync(filePath)) {
         res.download(filePath, (err) => {
-            // Remove o arquivo após o download
             if (fs.existsSync(filePath)) {
                 fs.unlink(filePath, (unlinkErr) => {
                     if (unlinkErr) console.error(`Failed to delete file after download: ${filename}`, unlinkErr);
@@ -504,43 +479,35 @@ app.get('/download/:filename', (req, res) => {
     }
 });
 
-// Endpoint de status da API
 app.get('/status', (req, res) => {
     res.json({
         status: 'running',
         timestamp: new Date().toISOString(),
-        version: '1.2.0',
+        version: '1.3.0',
+        features: ['Image Loading', 'Chart Rendering', 'PDF Generation'],
         endpoints: {
-            'POST /generate-pdf': 'Gera PDF a partir de URL',
-            'POST /debug-page': 'Debug de resolução e DPI da página',
-            'GET /download/:filename': 'Download de PDF gerado',
+            'POST /generate-pdf': 'Gera PDF com imagens e gráficos',
+            'POST /debug-page': 'Debug de página',
+            'GET /download/:filename': 'Download de PDF',
             'GET /status': 'Status da API'
         }
     });
 });
 
-// Endpoint de debug para capturar informações de resolução
 app.post('/debug-page', apiKeyAuth, async (req, res) => {
     const { url } = req.body;
-
     if (!url) {
         return res.status(400).json({ error: 'URL é obrigatória' });
     }
 
     let browser;
     try {
-        console.log(`🔍 Debug da página: ${url}`);
-
         browser = await puppeteer.launch({
             headless: "new",
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--single-process',
                 '--disable-gpu'
             ]
         });
@@ -548,68 +515,28 @@ app.post('/debug-page', apiKeyAuth, async (req, res) => {
         const page = await browser.newPage();
         await page.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 2 });
         await page.goto(url, { waitUntil: 'networkidle0', timeout: 120000 });
-        await page.emulateMediaType('screen');
-        await page.waitForTimeout(3000);
-
+        
         const debugInfo = await page.evaluate(() => {
+            const images = Array.from(document.querySelectorAll('img'));
+            const charts = document.querySelectorAll('.apexcharts-canvas');
+            
             return {
-                puppeteerViewport: { width: 1600, height: 1000, deviceScaleFactor: 2 },
-                pageInfo: {
-                    screenWidth: window.screen.width,
-                    screenHeight: window.screen.height,
-                    viewportWidth: window.innerWidth,
-                    viewportHeight: window.innerHeight,
-                    documentWidth: document.documentElement.scrollWidth,
-                    documentHeight: document.documentElement.scrollHeight,
-                    bodyWidth: document.body.scrollWidth,
-                    bodyHeight: document.body.scrollHeight
+                images: {
+                    total: images.length,
+                    loaded: images.filter(img => img.complete && img.naturalWidth > 0).length,
+                    failed: images.filter(img => img.complete && img.naturalWidth === 0).length,
+                    pending: images.filter(img => !img.complete).length
                 },
-                dpiInfo: {
-                    devicePixelRatio: window.devicePixelRatio,
-                    dpiCalculated: window.devicePixelRatio * 96,
-                    cssPixelRatio: window.devicePixelRatio
+                charts: {
+                    total: charts.length,
+                    rendered: Array.from(charts).filter(chart => {
+                        return chart.querySelector('svg g.apexcharts-series path, svg g.apexcharts-series rect');
+                    }).length
                 },
-                mediaQueries: {
-                    print: window.matchMedia('print').matches,
-                    screen: window.matchMedia('screen').matches,
-                    minWidth576: window.matchMedia('(min-width: 576px)').matches,
-                    minWidth768: window.matchMedia('(min-width: 768px)').matches,
-                    minWidth992: window.matchMedia('(min-width: 992px)').matches,
-                    minWidth1200: window.matchMedia('(min-width: 1200px)').matches,
-                    minWidth1400: window.matchMedia('(min-width: 1400px)').matches,
-                    minWidth1600: window.matchMedia('(min-width: 1600px)').matches,
-                    maxWidth767: window.matchMedia('(max-width: 767px)').matches,
-                    maxWidth991: window.matchMedia('(max-width: 991px)').matches
-                },
-                browserInfo: {
-                    userAgent: navigator.userAgent,
-                    platform: navigator.platform,
-                    language: navigator.language
-                },
-                chartsInfo: (() => {
-                    const charts = document.querySelectorAll('.apexcharts-canvas');
-                    return {
-                        totalCharts: charts.length,
-                        renderedCharts: Array.from(charts).filter(chart => {
-                            return chart.querySelector('svg g.apexcharts-series path, svg g.apexcharts-series rect');
-                        }).length,
-                        apexChartsLoaded: typeof window.ApexCharts !== 'undefined',
-                        reportsLoaded: typeof window.Reports !== 'undefined'
-                    };
-                })(),
-                elementsInfo: (() => {
-                    const container = document.querySelector('.container, .container-fluid');
-                    const row = document.querySelector('.row');
-                    const cols = document.querySelectorAll('[class*="col-"]');
-
-                    return {
-                        containerWidth: container ? getComputedStyle(container).width : 'não encontrado',
-                        containerMaxWidth: container ? getComputedStyle(container).maxWidth : 'não encontrado',
-                        rowDisplay: row ? getComputedStyle(row).display : 'não encontrado',
-                        colsCount: cols.length,
-                        firstColWidth: cols[0] ? getComputedStyle(cols[0]).width : 'não encontrado'
-                    };
-                })()
+                viewport: {
+                    width: window.innerWidth,
+                    height: window.innerHeight
+                }
             };
         });
 
@@ -618,34 +545,18 @@ app.post('/debug-page', apiKeyAuth, async (req, res) => {
         res.json({
             success: true,
             url: url,
-            timestamp: new Date().toISOString(),
             debugInfo: debugInfo,
-            recommendations: {
-                cssAdjustments: [
-                    'Para ajustar o CSS, use as informações de viewport e media queries',
-                    `Viewport atual: ${debugInfo.pageInfo.viewportWidth}x${debugInfo.pageInfo.viewportHeight}`,
-                    `DPI: ${debugInfo.dpiInfo.dpiCalculated}`,
-                    `Gráficos encontrados: ${debugInfo.chartsInfo.totalCharts}, Renderizados: ${debugInfo.chartsInfo.renderedCharts}`
-                ],
-                pdfSettings: {
-                    recommendedViewport: { width: 1600, height: 1000, deviceScaleFactor: 2 },
-                    recommendedFormat: 'A4',
-                    recommendedLandscape: true,
-                    recommendedScale: 0.9
-                }
-            }
+            timestamp: new Date().toISOString()
         });
 
     } catch (error) {
         if (browser) await browser.close();
-        console.error('Erro no debug:', error);
-        res.status(500).json({ error: 'Erro ao fazer debug da página', details: error.message });
+        res.status(500).json({ error: 'Erro no debug', details: error.message });
     }
 });
 
-// --- INICIALIZAÇÃO DO SERVIDOR ---
 app.listen(port, () => {
-    console.log(`PDF Generation API is running on port ${port}`);
+    console.log(`PDF Generation API v1.3.0 running on port ${port}`);
+    console.log(`Melhorias: Carregamento de imagens otimizado`);
     console.log(`Status endpoint: http://localhost:${port}/status`);
-    console.log('Correções para gráficos ApexCharts implementadas');
 });
