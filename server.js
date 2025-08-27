@@ -151,7 +151,8 @@ async function waitForContentLoad(page) {
 }
 
 app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
-    const { url, options = {} } = req.body;
+    const { url, options = {}, landscape } = req.body;
+
     if (!url) {
         return res.status(400).json({ success: false, error: 'The "url" property is required in the JSON body.' });
     }
@@ -247,43 +248,21 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         // Debug: Capturar informações de resolução e DPI
         const pageInfo = await page.evaluate(() => {
             return {
-                // Informações da tela/viewport
-                screenWidth: window.screen.width,
-                screenHeight: window.screen.height,
-                viewportWidth: window.innerWidth,
-                viewportHeight: window.innerHeight,
-                documentWidth: document.documentElement.scrollWidth,
-                documentHeight: document.documentElement.scrollHeight,
-                
-                // DPI e densidade de pixels
-                devicePixelRatio: window.devicePixelRatio,
-                dpi: window.devicePixelRatio * 96, // DPI padrão do CSS é 96
-                
-                // Informações de CSS
-                cssPixelRatio: window.devicePixelRatio,
-                
-                // Media queries ativas
+                screenWidth: window.screen.width, screenHeight: window.screen.height,
+                viewportWidth: window.innerWidth, viewportHeight: window.innerHeight,
+                documentWidth: document.documentElement.scrollWidth, documentHeight: document.documentElement.scrollHeight,
+                devicePixelRatio: window.devicePixelRatio, dpi: window.devicePixelRatio * 96,
                 mediaQueries: {
-                    print: window.matchMedia('print').matches,
-                    screen: window.matchMedia('screen').matches,
+                    print: window.matchMedia('print').matches, screen: window.matchMedia('screen').matches,
                     minWidth1200: window.matchMedia('(min-width: 1200px)').matches,
                     minWidth1400: window.matchMedia('(min-width: 1400px)').matches,
                     minWidth1600: window.matchMedia('(min-width: 1600px)').matches
                 },
-                
-                // User agent
                 userAgent: navigator.userAgent
             };
         });
         
-        console.log('📊 Informações de Resolução e DPI:');
-        console.log('   Viewport Puppeteer: 1600x1000 (configurado)');
-        console.log(`   Viewport da Página: ${pageInfo.viewportWidth}x${pageInfo.viewportHeight}`);
-        console.log(`   Documento Total: ${pageInfo.documentWidth}x${pageInfo.documentHeight}`);
-        console.log(`   Tela: ${pageInfo.screenWidth}x${pageInfo.screenHeight}`);
-        console.log(`   Device Pixel Ratio: ${pageInfo.devicePixelRatio}`);
-        console.log(`   DPI Calculado: ${pageInfo.dpi}`);
-        console.log(`   Media Queries Ativas:`, pageInfo.mediaQueries);
+        console.log('📊 Informações de Resolução e DPI:', pageInfo);
         
         // Aguardar gráficos renderizarem (ApexCharts/ECharts)
         try {
@@ -291,7 +270,7 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
                 () => document.querySelectorAll('.apexcharts-canvas, .echarts').length > 0,
                 { timeout: 10000 }
             );
-            await new Promise(resolve => setTimeout(resolve, 500)); // Buffer para renderização completa
+            await new Promise(resolve => setTimeout(resolve, 500));
         } catch (e) {
             console.log('Gráficos não encontrados ou timeout - continuando...');
         }
@@ -302,11 +281,14 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         
         console.log('Gerando PDF...');
         
+        const isLandscape = typeof landscape === 'boolean' ? landscape : true;
+        console.log(`Modo de orientação definido para: ${isLandscape ? 'Paisagem (Landscape)' : 'Retrato (Portrait)'}`);
+
         // Configurações de PDF melhoradas
         const pdfOptions = {
             path: outputPath,
             format: options.format || 'A4',
-            landscape: true,  // Modo paisagem para manter layout de duas colunas
+            landscape: isLandscape,
             printBackground: true,
             preferCSSPageSize: false,
             margin: {
@@ -316,10 +298,10 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
                 left: options.marginLeft || '10mm'
             },
             displayHeaderFooter: false,
-            scale: 1,  // Scale 1 para manter qualidade
+            scale: 1,
             timeout: 60000
         };
-        
+
         // Gera o PDF com configurações otimizadas
         await page.pdf(pdfOptions);
         
@@ -347,7 +329,6 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         }
     }
 });
-
 app.get('/download/:filename', (req, res) => {
     const { filename } = req.params;
     if (filename.includes('..') || filename.includes('/')) {
