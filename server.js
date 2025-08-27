@@ -183,9 +183,9 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
                 '--font-render-hinting=none'
             ]
         });
-        
+
         const page = await browser.newPage();
-        
+
         // Configurar viewport de desktop largo para evitar layout mobile
         await page.setViewport({
             width: 1600,
@@ -195,7 +195,7 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
 
         // Configurações de user agent e headers
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-        
+
         // Intercepta requests para otimizar carregamento
         await page.setRequestInterception(true);
         page.on('request', (req) => {
@@ -209,34 +209,35 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         });
 
         console.log(`Navegando para: ${url}`);
-        
+
         // Navega para a página com timeout estendido
-        await page.goto(url, { 
-            waitUntil: ['networkidle0', 'domcontentloaded'], 
-            timeout: 120000 
+        await page.goto(url, {
+            waitUntil: ['networkidle0', 'domcontentloaded'],
+            timeout: 120000
         });
-        
+
         console.log('Página carregada, aguardando conteúdo dinâmico...');
-        
+
         // Aguarda carregamento de conteúdo dinâmico com timeout total
         console.log('Iniciando carregamento de conteúdo dinâmico...');
         await Promise.race([
             waitForContentLoad(page),
             new Promise(resolve => setTimeout(resolve, 15000)) // 15s timeout total
         ]);
-        
+
         // Rola a página para carregar todo o conteúdo
         console.log('Rolando página para carregar conteúdo...');
         await Promise.race([
             autoScroll(page),
             new Promise(resolve => setTimeout(resolve, 10000)) // 10s timeout para scroll
         ]);
-        
+
         // Forçar CSS de tela (não de impressão) para manter layout desktop
         await page.emulateMediaType('screen');
-        
+
         // Adicionar CSS para evitar quebras de layout em modo print
-        await page.addStyleTag({ content: `
+        await page.addStyleTag({
+            content: `
             @media print {
                 .no-print-break { break-inside: avoid !important; }
                 .container, .container-fluid { max-width: 100% !important; }
@@ -244,7 +245,7 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
                 .col, .col-* { flex: 1 !important; min-width: 0 !important; }
             }
         `});
-        
+
         // Debug: Capturar informações de resolução e DPI
         const pageInfo = await page.evaluate(() => {
             return {
@@ -261,26 +262,39 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
                 userAgent: navigator.userAgent
             };
         });
-        
+
         console.log('📊 Informações de Resolução e DPI:', pageInfo);
-        
+
         // Aguardar gráficos renderizarem (ApexCharts/ECharts)
         try {
+            console.log('Aguardando a renderização dos gráficos...');
+            // Espera até que todos os containers de gráfico esperados tenham um SVG renderizado dentro deles.
             await page.waitForFunction(
-                () => document.querySelectorAll('.apexcharts-canvas, .echarts').length > 0,
-                { timeout: 10000 }
+                () => {
+                    const chartElements = document.querySelectorAll('.apexcharts-canvas, .echarts');
+                    if (chartElements.length === 0) {
+                        // Se não há gráficos na página, consideramos "concluído".
+                        return true;
+                    }
+                    // Verifica se cada elemento de gráfico contém um SVG que foi renderizado (tem altura).
+                    return Array.from(chartElements).every(el => {
+                        const svg = el.querySelector('svg');
+                        return svg && svg.getBoundingClientRect().height > 0;
+                    });
+                },
+                { timeout: 20000 } // Aumenta o timeout para 20 segundos para ser seguro
             );
-            await new Promise(resolve => setTimeout(resolve, 500));
+            console.log('Gráficos renderizados com sucesso.');
         } catch (e) {
-            console.log('Gráficos não encontrados ou timeout - continuando...');
+            console.log('Gráficos não encontrados ou timeout ao aguardar a renderização completa - continuando...');
         }
-        
-        // Pausa final para garantir que tudo foi renderizado
+
+        // Pausa final para garantir que tudo foi renderizado e estabilizado
         console.log('Aguardando renderização final...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 2s de segurança
+
         console.log('Gerando PDF...');
-        
+
         const isLandscape = typeof landscape === 'boolean' ? landscape : true;
         console.log(`Modo de orientação definido para: ${isLandscape ? 'Paisagem (Landscape)' : 'Retrato (Portrait)'}`);
 
@@ -304,13 +318,13 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
 
         // Gera o PDF com configurações otimizadas
         await page.pdf(pdfOptions);
-        
+
         console.log(`PDF gerado com sucesso: ${filename}`);
-        
+
         const downloadUrl = `${req.protocol}://${req.get('host')}/download/${filename}`;
-        res.status(200).json({ 
-            success: true, 
-            downloadUrl: downloadUrl, 
+        res.status(200).json({
+            success: true,
+            downloadUrl: downloadUrl,
             expiresIn: '1 hour',
             filename: filename
         });
@@ -318,10 +332,10 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
     } catch (error) {
         console.error('PDF Generation Error:', error.message);
         console.error('Stack trace:', error.stack);
-        res.status(500).json({ 
-            success: false, 
-            error: 'Failed to generate PDF.', 
-            details: error.message 
+        res.status(500).json({
+            success: false,
+            error: 'Failed to generate PDF.',
+            details: error.message
         });
     } finally {
         if (browser) {
@@ -370,15 +384,15 @@ app.get('/status', (req, res) => {
 // Endpoint de debug para capturar informações de resolução
 app.post('/debug-page', apiKeyAuth, async (req, res) => {
     const { url } = req.body;
-    
+
     if (!url) {
         return res.status(400).json({ error: 'URL é obrigatória' });
     }
-    
+
     let browser;
     try {
         console.log(`🔍 Debug da página: ${url}`);
-        
+
         browser = await puppeteer.launch({
             headless: "new",
             args: [
@@ -392,31 +406,31 @@ app.post('/debug-page', apiKeyAuth, async (req, res) => {
                 '--disable-gpu'
             ]
         });
-        
+
         const page = await browser.newPage();
-        
+
         // Configurar viewport de desktop largo
         await page.setViewport({
             width: 1600,
             height: 1000,
             deviceScaleFactor: 2
         });
-        
+
         // Navegar para a página
         await page.goto(url, { waitUntil: 'networkidle0', timeout: 120000 });
-        
+
         // Forçar CSS de tela
         await page.emulateMediaType('screen');
-        
+
         // Aguardar carregamento
         await page.waitForTimeout(3000);
-        
+
         // Capturar informações detalhadas
         const debugInfo = await page.evaluate(() => {
             return {
                 // Configurações do Puppeteer
                 puppeteerViewport: { width: 1600, height: 1000, deviceScaleFactor: 2 },
-                
+
                 // Informações da página
                 pageInfo: {
                     screenWidth: window.screen.width,
@@ -428,14 +442,14 @@ app.post('/debug-page', apiKeyAuth, async (req, res) => {
                     bodyWidth: document.body.scrollWidth,
                     bodyHeight: document.body.scrollHeight
                 },
-                
+
                 // DPI e densidade
                 dpiInfo: {
                     devicePixelRatio: window.devicePixelRatio,
                     dpiCalculated: window.devicePixelRatio * 96,
                     cssPixelRatio: window.devicePixelRatio
                 },
-                
+
                 // Media queries
                 mediaQueries: {
                     print: window.matchMedia('print').matches,
@@ -449,20 +463,20 @@ app.post('/debug-page', apiKeyAuth, async (req, res) => {
                     maxWidth767: window.matchMedia('(max-width: 767px)').matches,
                     maxWidth991: window.matchMedia('(max-width: 991px)').matches
                 },
-                
+
                 // Informações do navegador
                 browserInfo: {
                     userAgent: navigator.userAgent,
                     platform: navigator.platform,
                     language: navigator.language
                 },
-                
+
                 // CSS computado de elementos importantes
                 elementsInfo: (() => {
                     const container = document.querySelector('.container, .container-fluid');
                     const row = document.querySelector('.row');
                     const cols = document.querySelectorAll('[class*="col-"]');
-                    
+
                     return {
                         containerWidth: container ? getComputedStyle(container).width : 'não encontrado',
                         containerMaxWidth: container ? getComputedStyle(container).maxWidth : 'não encontrado',
@@ -473,9 +487,9 @@ app.post('/debug-page', apiKeyAuth, async (req, res) => {
                 })()
             };
         });
-        
+
         await browser.close();
-        
+
         res.json({
             success: true,
             url: url,
@@ -496,7 +510,7 @@ app.post('/debug-page', apiKeyAuth, async (req, res) => {
                 }
             }
         });
-        
+
     } catch (error) {
         if (browser) await browser.close();
         console.error('Erro no debug:', error);
