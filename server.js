@@ -167,164 +167,112 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         const filename = `${crypto.randomBytes(20).toString('hex')}.pdf`;
         const outputPath = path.join(OUTPUT_DIR, filename);
 
-        // Configurações melhoradas do Puppeteer
         browser = await puppeteer.launch({
-            headless: "new", // Usa o novo modo headless
+            headless: "new",
             args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-web-security',
-                '--disable-features=VizDisplayCompositor',
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding',
-                '--disable-ipc-flooding-protection',
-                '--font-render-hinting=none'
+                '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+                '--disable-web-security', '--disable-features=VizDisplayCompositor',
+                '--disable-background-timer-throttling', '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding', '--disable-ipc-flooding-protection',
+                '--font-render-hinting=none',
+                // NOVO: Argumento para garantir que as fontes sejam carregadas corretamente
+                '--font-render-hinting=medium' 
             ]
         });
-
+        
         const page = await browser.newPage();
 
-        // Configurar viewport de desktop largo para evitar layout mobile
-        await page.setViewport({
-            width: 1600,
-            height: 1000,
-            deviceScaleFactor: 2
+        // --- NOVO: Capturar erros do console da página ---
+        page.on('console', msg => {
+            if (msg.type() === 'error') {
+                console.error(`[Browser Console ERROR]: ${msg.text()}`);
+            }
         });
-
-        // Configurações de user agent e headers
+        // ---------------------------------------------
+        
+        await page.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 2 });
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-
-        // Intercepta requests para otimizar carregamento
+        
         await page.setRequestInterception(true);
         page.on('request', (req) => {
-            const resourceType = req.resourceType();
-            // Bloqueia recursos desnecessários para PDF
-            if (['media', 'websocket', 'manifest'].includes(resourceType)) {
-                req.abort();
-            } else {
-                req.continue();
-            }
+            if (['media', 'websocket', 'manifest'].includes(req.resourceType())) req.abort();
+            else req.continue();
         });
 
         console.log(`Navegando para: ${url}`);
+        await page.goto(url, { waitUntil: 'networkidle0', timeout: 120000 });
+        
+        console.log('Página carregada, forçando a renderização dos gráficos...');
 
-        // Navega para a página com timeout estendido
-        await page.goto(url, {
-            waitUntil: ['networkidle0', 'domcontentloaded'],
-            timeout: 120000
+        // --- NOVO E MAIS IMPORTANTE: Forçar a re-inicialização dos gráficos ---
+        // Isso garante que os gráficos sejam renderizados mesmo que haja uma race condition.
+        await page.evaluate(() => {
+            // Verifica se o objeto Reports e a função init existem antes de chamar
+            if (window.Reports && typeof window.Reports.init === 'function') {
+                console.log('Forcing chart re-initialization via Reports.init()');
+                window.Reports.init();
+            } else {
+                console.warn('window.Reports.init() not found. Cannot force chart render.');
+            }
         });
+        // ------------------------------------------------------------------
 
-        console.log('Página carregada, aguardando conteúdo dinâmico...');
-
-        // Aguarda carregamento de conteúdo dinâmico com timeout total
-        console.log('Iniciando carregamento de conteúdo dinâmico...');
+        // Aguarda carregamento de conteúdo dinâmico com a mesma lógica de antes
         await Promise.race([
             waitForContentLoad(page),
-            new Promise(resolve => setTimeout(resolve, 15000)) // 15s timeout total
+            new Promise(resolve => setTimeout(resolve, 15000))
         ]);
-
-        // Rola a página para carregar todo o conteúdo
-        console.log('Rolando página para carregar conteúdo...');
-        await Promise.race([
-            autoScroll(page),
-            new Promise(resolve => setTimeout(resolve, 10000)) // 10s timeout para scroll
-        ]);
-
-        // Forçar CSS de tela (não de impressão) para manter layout desktop
+        
         await page.emulateMediaType('screen');
-
-        // Adicionar CSS para evitar quebras de layout em modo print
-        await page.addStyleTag({
-            content: `
-            @media print {
-                .no-print-break { break-inside: avoid !important; }
-                .container, .container-fluid { max-width: 100% !important; }
-                .row { display: flex !important; flex-wrap: wrap !important; }
-                .col, .col-* { flex: 1 !important; min-width: 0 !important; }
-            }
-        `});
-
-        // Debug: Capturar informações de resolução e DPI
-        const pageInfo = await page.evaluate(() => {
-            return {
-                screenWidth: window.screen.width, screenHeight: window.screen.height,
-                viewportWidth: window.innerWidth, viewportHeight: window.innerHeight,
-                documentWidth: document.documentElement.scrollWidth, documentHeight: document.documentElement.scrollHeight,
-                devicePixelRatio: window.devicePixelRatio, dpi: window.devicePixelRatio * 96,
-                mediaQueries: {
-                    print: window.matchMedia('print').matches, screen: window.matchMedia('screen').matches,
-                    minWidth1200: window.matchMedia('(min-width: 1200px)').matches,
-                    minWidth1400: window.matchMedia('(min-width: 1400px)').matches,
-                    minWidth1600: window.matchMedia('(min-width: 1600px)').matches
-                },
-                userAgent: navigator.userAgent
-            };
-        });
-
-        console.log('📊 Informações de Resolução e DPI:', pageInfo);
-
-        // Aguardar gráficos renderizarem (ApexCharts/ECharts)
+        
+        // Aguardar gráficos renderizarem com a função robusta
         try {
-            console.log('Aguardando a renderização dos gráficos...');
-            // Espera até que todos os containers de gráfico esperados tenham um SVG renderizado dentro deles.
+            console.log('Aguardando a renderização dos gráficos após a chamada manual...');
             await page.waitForFunction(
                 () => {
-                    const chartElements = document.querySelectorAll('.apexcharts-canvas, .echarts');
-                    if (chartElements.length === 0) {
-                        // Se não há gráficos na página, consideramos "concluído".
-                        return true;
-                    }
-                    // Verifica se cada elemento de gráfico contém um SVG que foi renderizado (tem altura).
+                    const chartElements = document.querySelectorAll('.apexcharts-canvas');
+                    if (chartElements.length === 0) return true; 
+                    
+                    // Condição melhorada: Procura por um <path>, que é a linha/barra do gráfico.
+                    // Isso é mais confiável do que apenas verificar a altura do SVG.
                     return Array.from(chartElements).every(el => {
-                        const svg = el.querySelector('svg');
-                        return svg && svg.getBoundingClientRect().height > 0;
+                        return el.querySelector('svg g.apexcharts-series path, svg g.apexcharts-heatmap-series rect');
                     });
                 },
-                { timeout: 20000 } // Aumenta o timeout para 20 segundos para ser seguro
+                { timeout: 20000 }
             );
             console.log('Gráficos renderizados com sucesso.');
         } catch (e) {
-            console.log('Gráficos não encontrados ou timeout ao aguardar a renderização completa - continuando...');
+            console.log('Gráficos ainda não encontrados ou timeout mesmo após chamada manual - continuando...');
         }
-
-        // Pausa final para garantir que tudo foi renderizado e estabilizado
+        
+        // Pausa final de segurança
         console.log('Aguardando renderização final...');
-        await new Promise(resolve => setTimeout(resolve, 2000)); // 2s de segurança
-
+        await new Promise(resolve => setTimeout(resolve, 3000)); // Aumentei para 3s por segurança
+        
         console.log('Gerando PDF...');
-
+        
         const isLandscape = typeof landscape === 'boolean' ? landscape : true;
         console.log(`Modo de orientação definido para: ${isLandscape ? 'Paisagem (Landscape)' : 'Retrato (Portrait)'}`);
 
-        // Configurações de PDF melhoradas
         const pdfOptions = {
             path: outputPath,
             format: options.format || 'A4',
             landscape: isLandscape,
             printBackground: true,
-            preferCSSPageSize: false,
-            margin: {
-                top: options.marginTop || '10mm',
-                right: options.marginRight || '10mm',
-                bottom: options.marginBottom || '10mm',
-                left: options.marginLeft || '10mm'
-            },
-            displayHeaderFooter: false,
+            margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
             scale: 1,
             timeout: 60000
         };
 
-        // Gera o PDF com configurações otimizadas
         await page.pdf(pdfOptions);
-
+        
         console.log(`PDF gerado com sucesso: ${filename}`);
-
+        
         const downloadUrl = `${req.protocol}://${req.get('host')}/download/${filename}`;
-        res.status(200).json({
-            success: true,
-            downloadUrl: downloadUrl,
+        res.status(200).json({ 
+            success: true, 
+            downloadUrl: downloadUrl, 
             expiresIn: '1 hour',
             filename: filename
         });
@@ -332,10 +280,10 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
     } catch (error) {
         console.error('PDF Generation Error:', error.message);
         console.error('Stack trace:', error.stack);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to generate PDF.',
-            details: error.message
+        res.status(500).json({ 
+            success: false, 
+            error: 'Failed to generate PDF.', 
+            details: error.message 
         });
     } finally {
         if (browser) {
@@ -343,6 +291,7 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         }
     }
 });
+
 app.get('/download/:filename', (req, res) => {
     const { filename } = req.params;
     if (filename.includes('..') || filename.includes('/')) {
