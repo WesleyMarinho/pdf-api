@@ -1,6 +1,6 @@
 {
   "name": "pdf-generation-api",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Professional PDF Generation API with Puppeteer - Clean, scalable, and production-ready",
   "main": "server.js",
   "scripts": {
