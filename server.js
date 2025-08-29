@@ -1,4 +1,4 @@
-// Carrega as variáveis de ambiente do arquivo .env
+// Load environment variables from .env file
 require('dotenv').config();
 
 const express = require('express');
@@ -10,7 +10,7 @@ const { URL } = require('url');
 
 const app = express();
 
-// --- CONFIGURAÇÃO --- 
+// --- CONFIGURATION --- 
 const port = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY;
 const OUTPUT_DIR = path.join(__dirname, 'generated_pdfs');
@@ -18,7 +18,7 @@ const FILE_EXPIRATION_HOURS = process.env.FILE_EXPIRATION_HOURS || 1;
 const FILE_EXPIRATION_MS = FILE_EXPIRATION_HOURS * 60 * 60 * 1000;
 const CLEANUP_INTERVAL_MS = 900000; // 15 minutos
 
-// --- INICIALIZAÇÃO ---
+// --- INITIALIZATION ---
 if (!fs.existsSync(OUTPUT_DIR)) {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 }
@@ -53,9 +53,9 @@ setInterval(cleanupOldFiles, CLEANUP_INTERVAL_MS);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Middleware global de segurança
+// Global security middleware
 app.use((req, res, next) => {
-    // Headers de segurança básicos para todas as respostas
+    // Basic security headers for all responses
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('X-XSS-Protection', '1; mode=block');
@@ -68,7 +68,7 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
     
-    // Para requisições OPTIONS (preflight)
+    // For OPTIONS requests (preflight)
     if (req.method === 'OPTIONS') {
         res.status(200).end();
         return;
@@ -89,7 +89,7 @@ const apiKeyAuth = (req, res, next) => {
     res.status(401).json({ success: false, error: 'Unauthorized: Invalid or missing API Key' });
 };
 
-// --- FUNÇÕES AUXILIARES ---
+// --- AUXILIARY FUNCTIONS ---
 
 /**
  * Formata o tempo restante em formato legível
@@ -140,7 +140,7 @@ async function waitForImagesLoad(page) {
 
             images.forEach((img, index) => {
                 if (img.complete && img.naturalWidth > 0) {
-                    console.log(`Imagem ${index + 1} já carregada: ${img.src}`);
+                    console.log(`Image ${index + 1} already loaded: ${img.src}`);
                     checkComplete();
                 } else {
                     console.log(`Aguardando carregamento da imagem ${index + 1}: ${img.src}`);
@@ -162,7 +162,7 @@ async function waitForImagesLoad(page) {
                     img.addEventListener('load', onLoad);
                     img.addEventListener('error', onError);
 
-                    // Força recarregamento se necessário
+                    // Force reload if necessary
                     if (img.src) {
                         const currentSrc = img.src;
                         img.src = '';
@@ -171,9 +171,9 @@ async function waitForImagesLoad(page) {
                 }
             });
 
-            // Timeout de segurança
+            // Safety timeout
             setTimeout(() => {
-                console.log('Timeout no carregamento de imagens, continuando...');
+                console.log('Image loading timeout, continuing...');
                 resolve();
             }, 15000);
         });
@@ -186,7 +186,7 @@ async function waitForImagesLoad(page) {
  */
 async function waitForContentLoad(page) {
     try {
-        // Aguarda carregamento básico da página
+        // Wait for basic page loading
         await page.waitForLoadState?.('networkidle') || new Promise(resolve => setTimeout(resolve, 2000));
 
         // Aguarda imagens carregarem
@@ -202,16 +202,16 @@ async function waitForContentLoad(page) {
         await page.waitForFunction(
             () => typeof window.ApexCharts !== 'undefined',
             { timeout: 10000 }
-        ).catch(() => console.log('ApexCharts não encontrado, continuando...'));
+        ).catch(() => console.log('ApexCharts not found, continuing...'));
 
-        console.log('Forçando inicialização dos gráficos...');
+        console.log('Forcing chart initialization...');
         await page.evaluate(() => {
             if (window.Reports && typeof window.Reports.init === 'function') {
                 console.log('Inicializando via Reports.init()');
                 try {
                     window.Reports.init();
                 } catch (e) {
-                    console.error('Erro na inicialização dos Reports:', e);
+                    console.error('Error in Reports initialization:', e);
                 }
             }
 
@@ -250,36 +250,36 @@ async function waitForContentLoad(page) {
                         window.Reports.initializeAllCharts();
                         window.Reports.initializeMiniCharts();
                     } catch (e) {
-                        console.error('Erro na re-inicialização:', e);
+                        console.error('Error in re-initialization:', e);
                     }
                 }, 1000);
             }
         });
 
-        // Aguarda renderização dos gráficos
-        console.log('Aguardando renderização dos gráficos...');
+        // Wait for chart rendering
+        console.log('Waiting for chart rendering...');
         await new Promise(resolve => setTimeout(resolve, 5000));
 
-        // Verificação final
+        // Final verification
         const allLoaded = await page.evaluate(() => {
-            // Verifica imagens
+            // Check images
             const images = Array.from(document.querySelectorAll('img'));
             const imagesLoaded = images.every(img => img.complete && img.naturalWidth > 0);
             
-            // Verifica gráficos
+            // Check charts
             const charts = document.querySelectorAll('.apexcharts-canvas svg');
             const chartsRendered = charts.length === 0 || Array.from(charts).some(svg => {
                 return svg.querySelector('g.apexcharts-series path, g.apexcharts-series rect, g.apexcharts-heatmap-series rect');
             });
 
-            console.log(`Imagens carregadas: ${imagesLoaded}, Gráficos renderizados: ${chartsRendered}`);
+            console.log(`Images loaded: ${imagesLoaded}, Charts rendered: ${chartsRendered}`);
             return imagesLoaded && chartsRendered;
         });
 
-        console.log(`Carregamento concluído: ${allLoaded ? 'Sucesso' : 'Parcial'}`);
+        console.log(`Loading completed: ${allLoaded ? 'Success' : 'Partial'}`);
 
     } catch (error) {
-        console.log('Erro aguardando carregamento de conteúdo:', error.message);
+        console.log('Error waiting for content loading:', error.message);
     }
 }
 
@@ -317,7 +317,7 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--disable-gpu',
-                // Parâmetros específicos para melhor carregamento de imagens
+                // Specific parameters for better image loading
                 '--disable-lazy-loading',
                 '--disable-background-media-suspend',
                 '--autoplay-policy=no-user-gesture-required'
@@ -326,13 +326,13 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
         
         const page = await browser.newPage();
 
-        // Intercepta apenas recursos desnecessários (mantém imagens)
+        // Intercept only unnecessary resources (keep images)
         await page.setRequestInterception(true);
         page.on('request', (req) => {
             const resourceType = req.resourceType();
             const url = req.url();
             
-            // Bloqueia apenas recursos realmente desnecessários
+            // Block only truly unnecessary resources
             if (resourceType === 'websocket' || 
                 resourceType === 'manifest' ||
                 url.includes('/ads/') ||
@@ -367,18 +367,18 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
             timeout: 120000 
         });
         
-        console.log('Página carregada, processando conteúdo...');
+        console.log('Page loaded, processing content...');
 
-        // Força CSS de tela
+        // Force screen CSS
         await page.emulateMediaType('screen');
 
-        // Aguarda carregamento completo do conteúdo
+        // Wait for complete content loading
         await Promise.race([
             waitForContentLoad(page),
             new Promise(resolve => setTimeout(resolve, 25000))
         ]);
         
-        console.log('Aplicando correções finais de CSS...');
+        console.log('Applying final CSS corrections...');
         await page.addStyleTag({
             content: `
                 /* Correções finais para PDF */
@@ -418,9 +418,9 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
             `
         });
 
-        // Força ajustes finais
+        // Force final adjustments
         await page.evaluate(() => {
-            // Força exibição de imagens lazy
+            // Force lazy image display
             document.querySelectorAll('img[loading="lazy"]').forEach(img => {
                 img.loading = 'eager';
                 if (img.dataset.src) {
@@ -428,7 +428,7 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
                 }
             });
 
-            // Ajusta gráficos
+            // Adjust charts
             const charts = document.querySelectorAll('.apexcharts-canvas');
             charts.forEach(chart => {
                 const svg = chart.querySelector('svg');
@@ -448,13 +448,13 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
             }
         });
 
-        console.log('Aguardando estabilização final...');
+        console.log('Waiting for final stabilization...');
         await new Promise(resolve => setTimeout(resolve, 3000));
         
         console.log('Gerando PDF...');
         
         const isLandscape = typeof landscape === 'boolean' ? landscape : true;
-        console.log(`Modo de orientação: ${isLandscape ? 'Paisagem' : 'Retrato'}`);
+        console.log(`Orientation mode: ${isLandscape ? 'Landscape' : 'Portrait'}`);
 
         const pdfOptions = {
             path: outputPath,
@@ -503,7 +503,7 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
 app.get('/download/:filename', (req, res) => {
     const { filename } = req.params;
     
-    // Validação rigorosa do nome do arquivo
+    // Strict filename validation
     if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\') || !/^[a-zA-Z0-9_-]+\.pdf$/.test(filename)) {
         return res.status(400).json({ error: 'Invalid filename.' });
     }
@@ -515,7 +515,7 @@ app.get('/download/:filename', (req, res) => {
     }
     
     try {
-        // Configurar headers de segurança para download sem avisos
+        // Configure security headers for download without warnings
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -550,7 +550,7 @@ app.get('/download/:filename', (req, res) => {
         });
         
         fileStream.on('end', () => {
-            console.log(`Download concluído com sucesso: ${filename}`);
+            console.log(`Download completed successfully: ${filename}`);
         });
         
         // Pipe do arquivo para a resposta
@@ -609,11 +609,11 @@ app.get('/files', apiKeyAuth, (req, res) => {
     }
 });
 
-// Endpoint para visualização inline do PDF (sem forçar download)
+// Endpoint for inline PDF viewing (without forcing download)
 app.get('/view/:filename', (req, res) => {
     const { filename } = req.params;
     
-    // Validação rigorosa do nome do arquivo
+    // Strict filename validation
     if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\') || !/^[a-zA-Z0-9_-]+\.pdf$/.test(filename)) {
         return res.status(400).json({ error: 'Invalid filename.' });
     }
@@ -625,7 +625,7 @@ app.get('/view/:filename', (req, res) => {
     }
     
     try {
-        // Configurar headers para visualização inline
+        // Configure headers for inline viewing
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
         res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -637,7 +637,7 @@ app.get('/view/:filename', (req, res) => {
         const stats = fs.statSync(filePath);
         res.setHeader('Content-Length', stats.size);
         
-        console.log(`Iniciando visualização inline do arquivo: ${filename} (${stats.size} bytes)`);
+        console.log(`Starting inline viewing of file: ${filename} (${stats.size} bytes)`);
         
         // Usar stream para envio mais eficiente
         const fileStream = fs.createReadStream(filePath);
@@ -650,14 +650,14 @@ app.get('/view/:filename', (req, res) => {
         });
         
         fileStream.on('end', () => {
-            console.log(`Visualização concluída com sucesso: ${filename}`);
+            console.log(`Inline viewing completed successfully: ${filename}`);
         });
         
         // Pipe do arquivo para a resposta
         fileStream.pipe(res);
         
     } catch (error) {
-        console.error(`Erro na visualização do arquivo ${filename}:`, error);
+        console.error(`Error viewing file ${filename}:`, error);
         if (!res.headersSent) {
             res.status(500).json({ error: 'Error processing file view.' });
         }
@@ -671,17 +671,17 @@ app.get('/status', (req, res) => {
         version: '1.4.0',
         features: ['Image Loading', 'Chart Rendering', 'PDF Generation', 'Secure Downloads', 'Inline Viewing'],
         endpoints: {
-            'POST /generate-pdf': 'Gera PDF com imagens e gráficos',
-            'POST /debug-page': 'Debug de página',
-            'GET /download/:filename': 'Download seguro de PDF (forçar download)',
-            'GET /view/:filename': 'Visualização inline de PDF (abrir no navegador)',
-            'GET /files': 'Lista arquivos disponíveis e horários de expiração',
-            'GET /status': 'Status da API'
+            'POST /generate-pdf': 'Generate PDF with images and charts',
+            'POST /debug-page': 'Page debugging',
+            'GET /download/:filename': 'Secure PDF download (force download)',
+            'GET /view/:filename': 'Inline PDF viewing (open in browser)',
+            'GET /files': 'List available files and expiration times'
+            'GET /status': 'API Status'
         },
         security: {
-            'download_headers': 'Headers de segurança configurados',
-            'filename_validation': 'Validação rigorosa de nomes de arquivo',
-            'stream_based': 'Download baseado em streams para eficiência'
+            'download_headers': 'Security headers configured',
+            'filename_validation': 'Strict filename validation',
+            'stream_based': 'Stream-based download for efficiency'
         }
     });
 });
@@ -689,7 +689,7 @@ app.get('/status', (req, res) => {
 app.post('/debug-page', apiKeyAuth, async (req, res) => {
     const { url } = req.body;
     if (!url) {
-        return res.status(400).json({ error: 'URL é obrigatória' });
+        return res.status(400).json({ error: 'URL is required' });
     }
 
     let browser;
