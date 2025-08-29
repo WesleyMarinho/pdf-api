@@ -477,18 +477,58 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
 
 app.get('/download/:filename', (req, res) => {
     const { filename } = req.params;
-    if (filename.includes('..') || filename.includes('/')) {
+    
+    // Validação rigorosa do nome do arquivo
+    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\') || !/^[a-zA-Z0-9_-]+\.pdf$/.test(filename)) {
         return res.status(400).json({ error: 'Invalid filename.' });
     }
+    
     const filePath = path.join(OUTPUT_DIR, filename);
-    if (fs.existsSync(filePath)) {
-        res.download(filePath, (err) => {
-            if (err) {
-                console.error(`Error sending file ${filename} to client:`, err);
+    
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'File not found or has expired.' });
+    }
+    
+    try {
+        // Configurar headers de segurança para download
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('X-Frame-Options', 'DENY');
+        res.setHeader('X-XSS-Protection', '1; mode=block');
+        res.setHeader('Referrer-Policy', 'no-referrer');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+        
+        // Verificar o tamanho do arquivo
+        const stats = fs.statSync(filePath);
+        res.setHeader('Content-Length', stats.size);
+        
+        console.log(`Iniciando download seguro do arquivo: ${filename} (${stats.size} bytes)`);
+        
+        // Usar stream para download mais eficiente
+        const fileStream = fs.createReadStream(filePath);
+        
+        fileStream.on('error', (err) => {
+            console.error(`Erro ao ler arquivo ${filename}:`, err);
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Error reading file.' });
             }
         });
-    } else {
-        res.status(404).json({ error: 'File not found or has expired.' });
+        
+        fileStream.on('end', () => {
+            console.log(`Download concluído com sucesso: ${filename}`);
+        });
+        
+        // Pipe do arquivo para a resposta
+        fileStream.pipe(res);
+        
+    } catch (error) {
+        console.error(`Erro no download do arquivo ${filename}:`, error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Error processing download.' });
+        }
     }
 });
 
@@ -537,18 +577,79 @@ app.get('/files', apiKeyAuth, (req, res) => {
     }
 });
 
+// Endpoint para visualização inline do PDF (sem forçar download)
+app.get('/view/:filename', (req, res) => {
+    const { filename } = req.params;
+    
+    // Validação rigorosa do nome do arquivo
+    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\') || !/^[a-zA-Z0-9_-]+\.pdf$/.test(filename)) {
+        return res.status(400).json({ error: 'Invalid filename.' });
+    }
+    
+    const filePath = path.join(OUTPUT_DIR, filename);
+    
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'File not found or has expired.' });
+    }
+    
+    try {
+        // Configurar headers para visualização inline
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+        res.setHeader('X-XSS-Protection', '1; mode=block');
+        res.setHeader('Referrer-Policy', 'no-referrer-when-downgrade');
+        
+        // Verificar o tamanho do arquivo
+        const stats = fs.statSync(filePath);
+        res.setHeader('Content-Length', stats.size);
+        
+        console.log(`Iniciando visualização inline do arquivo: ${filename} (${stats.size} bytes)`);
+        
+        // Usar stream para envio mais eficiente
+        const fileStream = fs.createReadStream(filePath);
+        
+        fileStream.on('error', (err) => {
+            console.error(`Erro ao ler arquivo ${filename}:`, err);
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Error reading file.' });
+            }
+        });
+        
+        fileStream.on('end', () => {
+            console.log(`Visualização concluída com sucesso: ${filename}`);
+        });
+        
+        // Pipe do arquivo para a resposta
+        fileStream.pipe(res);
+        
+    } catch (error) {
+        console.error(`Erro na visualização do arquivo ${filename}:`, error);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Error processing file view.' });
+        }
+    }
+});
+
 app.get('/status', (req, res) => {
     res.json({
         status: 'running',
         timestamp: new Date().toISOString(),
-        version: '1.3.0',
-        features: ['Image Loading', 'Chart Rendering', 'PDF Generation'],
+        version: '1.4.0',
+        features: ['Image Loading', 'Chart Rendering', 'PDF Generation', 'Secure Downloads', 'Inline Viewing'],
         endpoints: {
             'POST /generate-pdf': 'Gera PDF com imagens e gráficos',
             'POST /debug-page': 'Debug de página',
-            'GET /download/:filename': 'Download de PDF',
+            'GET /download/:filename': 'Download seguro de PDF (forçar download)',
+            'GET /view/:filename': 'Visualização inline de PDF (abrir no navegador)',
             'GET /files': 'Lista arquivos disponíveis e horários de expiração',
             'GET /status': 'Status da API'
+        },
+        security: {
+            'download_headers': 'Headers de segurança configurados',
+            'filename_validation': 'Validação rigorosa de nomes de arquivo',
+            'stream_based': 'Download baseado em streams para eficiência'
         }
     });
 });
