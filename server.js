@@ -51,6 +51,31 @@ setInterval(cleanupOldFiles, CLEANUP_INTERVAL_MS);
 
 // --- MIDDLEWARES ---
 app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Middleware global de segurança
+app.use((req, res, next) => {
+    // Headers de segurança básicos para todas as respostas
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+    res.setHeader('X-Download-Options', 'noopen');
+    
+    // CORS headers para permitir acesso de qualquer origem
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
+    
+    // Para requisições OPTIONS (preflight)
+    if (req.method === 'OPTIONS') {
+        res.status(200).end();
+        return;
+    }
+    
+    next();
+});
 
 const apiKeyAuth = (req, res, next) => {
     if (!API_KEY) {
@@ -490,7 +515,7 @@ app.get('/download/:filename', (req, res) => {
     }
     
     try {
-        // Configurar headers de segurança para download
+        // Configurar headers de segurança para download sem avisos
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -500,6 +525,13 @@ app.get('/download/:filename', (req, res) => {
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
+        res.setHeader('Content-Security-Policy', "default-src 'none'; object-src 'none'; script-src 'none';");
+        res.setHeader('X-Download-Options', 'noopen');
+        res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
         
         // Verificar o tamanho do arquivo
         const stats = fs.statSync(filePath);
