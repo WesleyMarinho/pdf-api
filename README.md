@@ -1,6 +1,6 @@
 # PDF Generation API
 
-![PDF API](./icon.svg)
+![PDF API](./public/assets/icon.svg)
 
 A robust and secure API for generating high-quality PDFs from URLs using Puppeteer with advanced image loading, chart rendering, and security features.
 
@@ -8,7 +8,7 @@ A robust and secure API for generating high-quality PDFs from URLs using Puppete
 
 - **API Base URL**: `http://localhost:3000` (Development)
 - **API Status**: `GET /status`
-- **Postman Collection**: [Download JSON](./postman-collection.json)
+- **Postman Collection**: [Download JSON](./docs/postman-collection.json)
 - **GitHub Repository**: [PDF API Repository](https://github.com/WesleyMarinho/pdf-api)
 - **Live Demo**: Coming Soon
 
@@ -85,23 +85,23 @@ A robust and secure API for generating high-quality PDFs from URLs using Puppete
 #### Complete .env Example
 
 ```env
-# Configuração Avançada da API de Geração de PDF
+# Advanced PDF Generation API Configuration
 
-## Configurações do Servidor
-PORT=3000                  # Porta de execução do servidor (padrão: 3000)
-NODE_ENV=development       # Ambiente de execução (development/production)
+## Server Settings
+PORT=3000                  # Server execution port (default: 3000)
+NODE_ENV=development       # Execution environment (development/production)
 
-## Configurações de Segurança
-HTTPS_REDIRECT=false       # Redirecionar HTTP para HTTPS (true/false)
-API_KEY=7IEICHQjqAi9HnNUz4TerLiczll9PBHa  # Chave secreta para autenticação da API
+## Security Settings
+HTTPS_REDIRECT=false       # Redirect HTTP to HTTPS (true/false)
+API_KEY=7IEICHQjqAi9HnNUz4TerLiczll9PBHa  # Secret key for API authentication
 
-## Configurações de Performance
-PUPPETEER_TIMEOUT=120000   # Timeout do Puppeteer em milissegundos (2 minutos)
-PDF_GENERATION_TIMEOUT=60000 # Timeout para geração de PDF em milissegundos (1 minuto)
+## Performance Settings
+PUPPETEER_TIMEOUT=120000   # Puppeteer timeout in milliseconds (2 minutes)
+PDF_GENERATION_TIMEOUT=60000 # PDF generation timeout in milliseconds (1 minute)
 
-## Gerenciamento de Arquivos
-FILE_EXPIRATION_MS=3600000 # Tempo de expiração dos arquivos em milissegundos (1 hora)
-CLEANUP_INTERVAL_MS=900000  # Intervalo de limpeza em milissegundos (15 minutos)
+## File Management
+FILE_EXPIRATION_MS=3600000 # File expiration time in milliseconds (1 hour)
+CLEANUP_INTERVAL_MS=900000  # Cleanup interval in milliseconds (15 minutes)
 ```
 
 ### API Key Configuration
