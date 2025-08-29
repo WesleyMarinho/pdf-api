@@ -14,9 +14,26 @@ const app = express();
 const port = process.env.PORT || 3000;
 const API_KEY = process.env.API_KEY;
 const OUTPUT_DIR = path.join(__dirname, 'generated_pdfs');
-const FILE_EXPIRATION_HOURS = process.env.FILE_EXPIRATION_HOURS || 1;
-const FILE_EXPIRATION_MS = FILE_EXPIRATION_HOURS * 60 * 60 * 1000;
-const CLEANUP_INTERVAL_MS = 900000; // 15 minutos
+
+// Configurações de Performance
+const PUPPETEER_TIMEOUT = parseInt(process.env.PUPPETEER_TIMEOUT) || 120000; // 2 minutos
+const PDF_GENERATION_TIMEOUT = parseInt(process.env.PDF_GENERATION_TIMEOUT) || 60000; // 1 minuto
+
+// Gerenciamento de Arquivos
+const FILE_EXPIRATION_MS = parseInt(process.env.FILE_EXPIRATION_MS) || 3600000; // 1 hora
+const CLEANUP_INTERVAL_MS = parseInt(process.env.CLEANUP_INTERVAL_MS) || 900000; // 15 minutos
+
+// Sistema de Logging
+const logOperation = (type, message, details = {}) => {
+    const timestamp = new Date().toISOString();
+    const logEntry = {
+        timestamp,
+        type,
+        message,
+        ...details
+    };
+    console.log(`[${timestamp}] ${type.toUpperCase()}: ${message}`, details.error ? `- Error: ${details.error}` : '');
+};
 
 // --- INITIALIZATION ---
 if (!fs.existsSync(OUTPUT_DIR)) {
@@ -26,20 +43,37 @@ if (!fs.existsSync(OUTPUT_DIR)) {
 const cleanupOldFiles = () => {
     fs.readdir(OUTPUT_DIR, (err, files) => {
         if (err) {
-            console.error("Error reading PDF directory for cleanup:", err);
+            logOperation('cleanup_error', 'Error reading PDF directory for cleanup', { error: err.message });
             return;
         }
+        
+        let deletedCount = 0;
+        let totalFiles = files.length;
+        
+        if (totalFiles === 0) {
+            logOperation('cleanup', 'No files to clean up');
+            return;
+        }
+        
         for (const file of files) {
             const filePath = path.join(OUTPUT_DIR, file);
             fs.stat(filePath, (err, stats) => {
                 if (err) {
-                    console.error(`Error getting stats for file ${file}:`, err);
+                    logOperation('cleanup_error', `Error getting stats for file ${file}`, { error: err.message });
                     return;
                 }
                 if (Date.now() - stats.mtime.getTime() > FILE_EXPIRATION_MS) {
                     fs.unlink(filePath, (err) => {
-                        if (err) console.error(`Failed to delete expired file: ${file}`, err);
-                        else console.log(`Deleted expired file: ${file}`);
+                        if (err) {
+                            logOperation('cleanup_error', `Failed to delete expired file: ${file}`, { error: err.message });
+                        } else {
+                            deletedCount++;
+                            logOperation('cleanup', `Deleted expired file: ${file}`, { 
+                                fileAge: Math.round((Date.now() - stats.mtime.getTime()) / 1000 / 60) + ' minutes',
+                                deletedCount,
+                                totalFiles
+                            });
+                        }
                     });
                 }
             });
@@ -307,42 +341,63 @@ async function waitForContentLoad(page) {
 
 app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
     const { url, options = {}, landscape } = req.body;
+    const startTime = Date.now();
+    const requestId = crypto.randomBytes(8).toString('hex');
+
+    logOperation('pdf_request', 'PDF generation request received', {
+        requestId,
+        url,
+        userAgent: req.get('User-Agent'),
+        ip: req.ip
+    });
 
     if (!url) {
+        logOperation('pdf_error', 'Missing URL parameter', { requestId });
         return res.status(400).json({ success: false, error: 'The "url" property is required in the JSON body.' });
     }
     try {
         new URL(url);
     } catch (_) {
+        logOperation('pdf_error', 'Invalid URL format', { requestId, url });
         return res.status(400).json({ success: false, error: 'Invalid URL format provided.' });
     }
 
     let browser = null;
+    const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('PDF generation timeout')), PDF_GENERATION_TIMEOUT);
+    });
+
     try {
         const filename = `${crypto.randomBytes(20).toString('hex')}.pdf`;
         const outputPath = path.join(OUTPUT_DIR, filename);
 
-        browser = await puppeteer.launch({
-            headless: "new",
-            args: [
-                '--no-sandbox', 
-                '--disable-setuid-sandbox', 
-                '--disable-dev-shm-usage',
-                '--disable-web-security', 
-                '--disable-features=VizDisplayCompositor',
-                '--disable-background-timer-throttling', 
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding', 
-                '--font-render-hinting=medium',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--disable-gpu',
-                // Specific parameters for better image loading
-                '--disable-lazy-loading',
-                '--disable-background-media-suspend',
-                '--autoplay-policy=no-user-gesture-required'
-            ]
-        });
+        logOperation('pdf_start', 'Starting PDF generation', { requestId, filename });
+
+        const pdfGenerationTask = async () => {
+            browser = await puppeteer.launch({
+                headless: "new",
+                timeout: PUPPETEER_TIMEOUT,
+                args: [
+                    '--no-sandbox', 
+                    '--disable-setuid-sandbox', 
+                    '--disable-dev-shm-usage',
+                    '--disable-web-security', 
+                    '--disable-features=VizDisplayCompositor',
+                    '--disable-background-timer-throttling', 
+                    '--disable-backgrounding-occluded-windows',
+                    '--disable-renderer-backgrounding', 
+                    '--font-render-hinting=medium',
+                    '--disable-accelerated-2d-canvas',
+                    '--no-first-run',
+                    '--disable-gpu',
+                    // Specific parameters for better image loading
+                    '--disable-lazy-loading',
+                    '--disable-background-media-suspend',
+                    '--autoplay-policy=no-user-gesture-required'
+                ]
+            });
+
+            logOperation('pdf_browser', 'Browser launched successfully', { requestId });
         
         const page = await browser.newPage();
 
@@ -367,38 +422,38 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
             }
         });
 
-        // Captura logs para debug
-        page.on('console', msg => {
-            const type = msg.type();
-            if (type === 'error') {
-                console.error(`[Browser Console ERROR]: ${msg.text()}`);
-            } else if (type === 'log' && msg.text().includes('Imagem')) {
-                console.log(`[Browser Image LOG]: ${msg.text()}`);
-            }
-        });
+            // Captura logs para debug
+            page.on('console', msg => {
+                const type = msg.type();
+                if (type === 'error') {
+                    logOperation('browser_error', `Browser console error: ${msg.text()}`, { requestId });
+                } else if (type === 'log' && msg.text().includes('Imagem')) {
+                    logOperation('browser_log', `Browser image log: ${msg.text()}`, { requestId });
+                }
+            });
 
-        // Configura viewport e user agent
-        await page.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 2 });
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-        
-        console.log(`Navegando para: ${url}`);
-        await page.goto(url, { 
-            waitUntil: ['networkidle0', 'domcontentloaded'], 
-            timeout: 120000 
-        });
-        
-        console.log('Page loaded, processing content...');
+            // Configura viewport e user agent
+            await page.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 2 });
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+            
+            logOperation('pdf_navigation', `Navigating to URL: ${url}`, { requestId });
+            await page.goto(url, { 
+                waitUntil: ['networkidle0', 'domcontentloaded'], 
+                timeout: PUPPETEER_TIMEOUT 
+            });
+            
+            logOperation('pdf_content_loading', 'Page loaded, processing content...', { requestId });
 
-        // Force screen CSS
-        await page.emulateMediaType('screen');
+            // Force screen CSS
+            await page.emulateMediaType('screen');
 
-        // Wait for complete content loading
-        await Promise.race([
-            waitForContentLoad(page),
-            new Promise(resolve => setTimeout(resolve, 25000))
-        ]);
-        
-        console.log('Applying final CSS corrections...');
+            // Wait for complete content loading
+            await Promise.race([
+                waitForContentLoad(page),
+                new Promise(resolve => setTimeout(resolve, 25000))
+            ]);
+            
+            logOperation('pdf_css_corrections', 'Applying final CSS corrections...', { requestId });
         await page.addStyleTag({
             content: `
                 /* Correções finais para PDF */
@@ -468,69 +523,110 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
             }
         });
 
-        console.log('Waiting for final stabilization...');
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        
-        console.log('Gerando PDF...');
-        
-        const isLandscape = typeof landscape === 'boolean' ? landscape : true;
-        console.log(`Orientation mode: ${isLandscape ? 'Landscape' : 'Portrait'}`);
+            logOperation('pdf_stabilization', 'Waiting for final stabilization...', { requestId });
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            logOperation('pdf_generation_start', 'Starting PDF generation...', { requestId });
+            
+            const isLandscape = typeof landscape === 'boolean' ? landscape : true;
+            logOperation('pdf_orientation', `Orientation mode: ${isLandscape ? 'Landscape' : 'Portrait'}`, { requestId });
 
-        const pdfOptions = {
-            path: outputPath,
-            format: options.format || 'A4',
-            landscape: isLandscape,
-            printBackground: true,
-            margin: { 
-                top: '10mm', 
-                right: '10mm', 
-                bottom: '10mm', 
-                left: '10mm' 
-            },
-            scale: 0.9,
-            timeout: 90000, // Timeout maior para imagens
-            preferCSSPageSize: true,
-            displayHeaderFooter: false
+            const pdfOptions = {
+                path: outputPath,
+                format: options.format || 'A4',
+                landscape: isLandscape,
+                printBackground: true,
+                margin: { 
+                    top: '10mm', 
+                    right: '10mm', 
+                    bottom: '10mm', 
+                    left: '10mm' 
+                },
+                scale: 0.9,
+                timeout: PDF_GENERATION_TIMEOUT,
+                preferCSSPageSize: true,
+                displayHeaderFooter: false
+            };
+
+            await page.pdf(pdfOptions);
+            
+            const endTime = Date.now();
+            const duration = endTime - startTime;
+            
+            logOperation('pdf_generation_success', `PDF generated successfully: ${filename}`, { 
+                requestId, 
+                filename, 
+                duration: `${duration}ms`,
+                outputPath 
+            });
+            
+            const downloadUrl = `${req.protocol}://${req.get('host')}/download/${filename}`;
+            res.status(200).json({ 
+                success: true, 
+                downloadUrl: downloadUrl, 
+                expiresIn: '1 hour',
+                filename: filename
+            });
         };
 
-        await page.pdf(pdfOptions);
-        
-        console.log(`PDF gerado com sucesso: ${filename}`);
-        
-        const downloadUrl = `${req.protocol}://${req.get('host')}/download/${filename}`;
-        res.status(200).json({ 
-            success: true, 
-            downloadUrl: downloadUrl, 
-            expiresIn: '1 hour',
-            filename: filename
-        });
+        // Execute with timeout
+        await Promise.race([pdfGenerationTask(), timeoutPromise]);
 
     } catch (error) {
-        console.error('PDF Generation Error:', error.message);
-        console.error('Stack trace:', error.stack);
-        res.status(500).json({ 
-            success: false, 
-            error: 'Failed to generate PDF.', 
-            details: error.message 
+        const endTime = Date.now();
+        const duration = endTime - startTime;
+        
+        // Check if it's a timeout error
+        const isTimeout = error.message === 'PDF generation timeout';
+        
+        logOperation('pdf_generation_error', `PDF generation failed: ${error.message}`, {
+            requestId,
+            duration: `${duration}ms`,
+            isTimeout,
+            errorStack: error.stack
         });
+        
+        if (isTimeout) {
+            res.status(408).json({ 
+                success: false, 
+                error: 'PDF generation timeout. The request took too long to process.', 
+                details: `Timeout after ${PDF_GENERATION_TIMEOUT}ms`
+            });
+        } else {
+            res.status(500).json({ 
+                success: false, 
+                error: 'Failed to generate PDF.', 
+                details: error.message 
+            });
+        }
     } finally {
         if (browser) {
-            await browser.close();
+            try {
+                await browser.close();
+                logOperation('browser_cleanup', 'Browser closed successfully', { requestId });
+            } catch (closeError) {
+                logOperation('browser_cleanup_error', `Error closing browser: ${closeError.message}`, { requestId });
+            }
         }
     }
 });
 
 app.get('/download/:filename', (req, res) => {
     const { filename } = req.params;
+    const downloadId = crypto.randomBytes(8).toString('hex');
+    
+    logOperation('download_request', `Download request received for file: ${filename}`, { downloadId });
     
     // Strict filename validation
     if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\') || !/^[a-zA-Z0-9_-]+\.pdf$/.test(filename)) {
+        logOperation('download_invalid_filename', `Invalid filename requested: ${filename}`, { downloadId });
         return res.status(400).json({ error: 'Invalid filename.' });
     }
     
     const filePath = path.join(OUTPUT_DIR, filename);
     
     if (!fs.existsSync(filePath)) {
+        logOperation('download_file_not_found', `File not found: ${filename}`, { downloadId, filePath });
         return res.status(404).json({ error: 'File not found or has expired.' });
     }
     
@@ -557,27 +653,44 @@ app.get('/download/:filename', (req, res) => {
         const stats = fs.statSync(filePath);
         res.setHeader('Content-Length', stats.size);
         
-        console.log(`Iniciando download seguro do arquivo: ${filename} (${stats.size} bytes)`);
+        logOperation('download_start', `Starting secure download: ${filename}`, { 
+            downloadId, 
+            filename, 
+            fileSize: `${stats.size} bytes` 
+        });
         
         // Usar stream para download mais eficiente
         const fileStream = fs.createReadStream(filePath);
         
         fileStream.on('error', (err) => {
-            console.error(`Erro ao ler arquivo ${filename}:`, err);
+            logOperation('download_stream_error', `Error reading file ${filename}: ${err.message}`, { 
+                downloadId, 
+                filename, 
+                error: err.message 
+            });
             if (!res.headersSent) {
                 res.status(500).json({ error: 'Error reading file.' });
             }
         });
         
         fileStream.on('end', () => {
-            console.log(`Download completed successfully: ${filename}`);
+            logOperation('download_success', `Download completed successfully: ${filename}`, { 
+                downloadId, 
+                filename, 
+                fileSize: `${stats.size} bytes` 
+            });
         });
         
         // Pipe do arquivo para a resposta
         fileStream.pipe(res);
         
     } catch (error) {
-        console.error(`Erro no download do arquivo ${filename}:`, error);
+        logOperation('download_error', `Error processing download for ${filename}: ${error.message}`, { 
+            downloadId, 
+            filename, 
+            error: error.message,
+            errorStack: error.stack 
+        });
         if (!res.headersSent) {
             res.status(500).json({ error: 'Error processing download.' });
         }

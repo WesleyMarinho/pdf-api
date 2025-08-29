@@ -64,11 +64,45 @@ A robust and secure API for generating high-quality PDFs from URLs using Puppete
 
 ### Environment Variables
 
+#### Basic Configuration
+
 | Variable | Description | Default |
 |----------|-------------|----------|
 | `PORT` | Server port | `3000` |
 | `API_KEY` | API authentication key | Required |
 | `NODE_ENV` | Environment mode | `development` |
+| `HTTPS_REDIRECT` | Redirect HTTP to HTTPS | `false` |
+
+#### Advanced Performance Configuration
+
+| Variable | Description | Default | Notes |
+|----------|-------------|---------|-------|
+| `PUPPETEER_TIMEOUT` | Puppeteer browser timeout (ms) | `120000` | 2 minutes |
+| `PDF_GENERATION_TIMEOUT` | PDF generation timeout (ms) | `60000` | 1 minute |
+| `FILE_EXPIRATION_MS` | File expiration time (ms) | `3600000` | 1 hour |
+| `CLEANUP_INTERVAL_MS` | Cleanup interval (ms) | `900000` | 15 minutes |
+
+#### Complete .env Example
+
+```env
+# Configuração Avançada da API de Geração de PDF
+
+## Configurações do Servidor
+PORT=3000                  # Porta de execução do servidor (padrão: 3000)
+NODE_ENV=development       # Ambiente de execução (development/production)
+
+## Configurações de Segurança
+HTTPS_REDIRECT=false       # Redirecionar HTTP para HTTPS (true/false)
+API_KEY=7IEICHQjqAi9HnNUz4TerLiczll9PBHa  # Chave secreta para autenticação da API
+
+## Configurações de Performance
+PUPPETEER_TIMEOUT=120000   # Timeout do Puppeteer em milissegundos (2 minutos)
+PDF_GENERATION_TIMEOUT=60000 # Timeout para geração de PDF em milissegundos (1 minuto)
+
+## Gerenciamento de Arquivos
+FILE_EXPIRATION_MS=3600000 # Tempo de expiração dos arquivos em milissegundos (1 hora)
+CLEANUP_INTERVAL_MS=900000  # Intervalo de limpeza em milissegundos (15 minutos)
+```
 
 ### API Key Configuration
 
@@ -111,9 +145,51 @@ A robust and secure API for generating high-quality PDFs from URLs using Puppete
 ### File Management
 
 - **Output Directory**: `./generated-pdfs/`
-- **File Expiration**: 24 hours
-- **Cleanup Interval**: 15 minutes
+- **File Expiration**: Configurable via `FILE_EXPIRATION_MS` (default: 1 hour)
+- **Cleanup Interval**: Configurable via `CLEANUP_INTERVAL_MS` (default: 15 minutes)
 - **Supported Formats**: PDF only
+- **Automatic Cleanup**: Old files are automatically removed based on expiration settings
+
+### 📊 Logging and Monitoring
+
+The API includes comprehensive logging for all operations:
+
+#### Log Types
+
+- **PDF Generation Logs**: Track successful generations, failures, and timeouts
+- **Download Logs**: Monitor file access and download operations
+- **Error Logs**: Detailed error tracking with stack traces
+- **Performance Logs**: Response times and resource usage
+- **Security Logs**: API key validation and access attempts
+
+#### Log Format
+
+```json
+{
+  "timestamp": "2024-01-20T10:30:45.123Z",
+  "level": "info",
+  "operation": "pdf_generation",
+  "requestId": "req_abc123",
+  "details": {
+    "url": "https://example.com",
+    "filename": "document_20240120.pdf",
+    "duration": 3500,
+    "status": "success"
+  }
+}
+```
+
+#### Monitoring Endpoints
+
+- **Health Check**: `GET /status` - Server status and configuration
+- **File Listing**: `GET /files` - Active files and expiration status
+
+#### Timeout Handling
+
+- **Puppeteer Timeout**: Configurable browser navigation timeout
+- **PDF Generation Timeout**: Separate timeout for PDF creation process
+- **Graceful Degradation**: Proper error responses for timeout scenarios
+- **Resource Cleanup**: Automatic browser cleanup on timeouts
 
 ## 📋 Postman Collection
 
