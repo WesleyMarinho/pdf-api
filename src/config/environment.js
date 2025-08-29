@@ -27,7 +27,7 @@ const config = {
     
     // File Management Configuration
     OUTPUT_DIR: process.env.OUTPUT_DIR || './generated-pdfs',
-    FILE_EXPIRATION_MS: parseInt(process.env.FILE_EXPIRATION_MS) || 3600000, // 1 hour
+    FILE_EXPIRATION_MS: parseInt(process.env.FILE_EXPIRATION_MS) || 604800000, // 7 days
     CLEANUP_INTERVAL_MS: parseInt(process.env.CLEANUP_INTERVAL_MS) || 900000, // 15 minutes
     
     // Development Configuration

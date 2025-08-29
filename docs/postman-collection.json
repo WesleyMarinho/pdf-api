@@ -35,7 +35,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"url\": \"https://example.com\",\n  \"filename\": \"example-document\",\n  \"format\": \"A4\",\n  \"orientation\": \"portrait\",\n  \"margin\": {\n    \"top\": \"1cm\",\n    \"right\": \"1cm\",\n    \"bottom\": \"1cm\",\n    \"left\": \"1cm\"\n  },\n  \"printBackground\": true,\n  \"displayHeaderFooter\": false\n}",
+							"raw": "{\n  \"url\": \"https://example.com\",\n  \"filename\": \"example-document\",\n  \"landscape\": false\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -51,7 +51,7 @@
 								"generate-pdf"
 							]
 						},
-						"description": "Generate a PDF from a given URL with customizable options including format, orientation, margins, and rendering settings."
+						"description": "Generate a PDF from a given URL with landscape/portrait orientation. Use 'landscape: true' for landscape mode or 'landscape: false' for portrait mode."
 					},
 					"response": [
 						{
@@ -61,7 +61,7 @@
 								"header": [],
 								"body": {
 									"mode": "raw",
-									"raw": "{\n  \"url\": \"https://example.com\",\n  \"filename\": \"example-document\"\n}",
+									"raw": "{\n  \"url\": \"https://example.com\",\n  \"filename\": \"example-document\",\n  \"landscape\": true\n}",
 									"options": {
 										"raw": {
 											"language": "json"

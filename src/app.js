@@ -13,6 +13,9 @@ const config = require('./config/environment');
 
 const app = express();
 
+// Trust proxy for correct host detection behind reverse proxies
+app.set('trust proxy', true);
+
 // --- CONFIGURATION --- 
 const OUTPUT_DIR = path.join(__dirname, '..', 'generated-pdfs');
 
@@ -35,6 +38,18 @@ const logOperation = (type, message, details = {}) => {
         ...details
     };
     console.log(`[${timestamp}] ${type.toUpperCase()}: ${message}`, details.error ? `- Error: ${details.error}` : '');
+};
+
+// Helper function to get the correct host and protocol
+const getHostInfo = (req) => {
+    // Check for forwarded headers first (proxy/load balancer)
+    const forwardedHost = req.get('X-Forwarded-Host') || req.get('X-Original-Host');
+    const forwardedProto = req.get('X-Forwarded-Proto') || req.get('X-Forwarded-Protocol');
+    
+    const host = forwardedHost || req.get('host');
+    const protocol = forwardedProto || req.protocol;
+    
+    return { host, protocol };
 };
 
 // --- INITIALIZATION ---
@@ -91,14 +106,16 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // HTTPS enforcement middleware
 app.use((req, res, next) => {
+    const { host, protocol } = getHostInfo(req);
+    
     // Force HTTPS in production
-    if (req.header('x-forwarded-proto') !== 'https' && process.env.NODE_ENV === 'production') {
-        return res.redirect(301, `https://${req.header('host')}${req.url}`);
+    if (protocol !== 'https' && process.env.NODE_ENV === 'production') {
+        return res.redirect(301, `https://${host}${req.url}`);
     }
     
     // Force HTTPS for all environments if not localhost
-    if (!req.secure && req.get('host') !== 'localhost:3000' && req.get('host') !== '127.0.0.1:3000') {
-        return res.redirect(301, `https://${req.get('host')}${req.url}`);
+    if (protocol !== 'https' && host !== 'localhost:3000' && host !== '127.0.0.1:3000') {
+        return res.redirect(301, `https://${host}${req.url}`);
     }
     
     next();
@@ -562,7 +579,8 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
                 outputPath 
             });
             
-            const downloadUrl = `${req.protocol}://${req.get('host')}/download/${filename}`;
+            const { host, protocol } = getHostInfo(req);
+            const downloadUrl = `${protocol}://${host}/download/${filename}`;
             res.status(200).json({ 
                 success: true, 
                 downloadUrl: downloadUrl, 

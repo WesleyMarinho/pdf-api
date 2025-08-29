@@ -79,7 +79,7 @@ A robust and secure API for generating high-quality PDFs from URLs using Puppete
 |----------|-------------|---------|-------|
 | `PUPPETEER_TIMEOUT` | Puppeteer browser timeout (ms) | `120000` | 2 minutes |
 | `PDF_GENERATION_TIMEOUT` | PDF generation timeout (ms) | `60000` | 1 minute |
-| `FILE_EXPIRATION_MS` | File expiration time (ms) | `3600000` | 1 hour |
+| `FILE_EXPIRATION_MS` | File expiration time (ms) | `604800000` | 7 days |
 | `CLEANUP_INTERVAL_MS` | Cleanup interval (ms) | `900000` | 15 minutes |
 
 #### Complete .env Example
@@ -100,7 +100,7 @@ PUPPETEER_TIMEOUT=120000   # Puppeteer timeout in milliseconds (2 minutes)
 PDF_GENERATION_TIMEOUT=60000 # PDF generation timeout in milliseconds (1 minute)
 
 ## File Management
-FILE_EXPIRATION_MS=3600000 # File expiration time in milliseconds (1 hour)
+FILE_EXPIRATION_MS=604800000 # File expiration time in milliseconds (7 days)
 CLEANUP_INTERVAL_MS=900000  # Cleanup interval in milliseconds (15 minutes)
 ```
 
@@ -145,7 +145,7 @@ CLEANUP_INTERVAL_MS=900000  # Cleanup interval in milliseconds (15 minutes)
 ### File Management
 
 - **Output Directory**: `./generated-pdfs/`
-- **File Expiration**: Configurable via `FILE_EXPIRATION_MS` (default: 1 hour)
+- **File Expiration**: Configurable via `FILE_EXPIRATION_MS` (default: 7 days)
 - **Cleanup Interval**: Configurable via `CLEANUP_INTERVAL_MS` (default: 15 minutes)
 - **Supported Formats**: PDF only
 - **Automatic Cleanup**: Old files are automatically removed based on expiration settings
@@ -496,11 +496,32 @@ The API implements comprehensive security headers:
 
 ### Custom PDF Options
 The API automatically optimizes PDF generation with:
-- A4 format
-- Landscape/Portrait orientation
-- Optimized margins
-- High-quality scaling
+- A4 format (default)
+- Landscape/Portrait orientation control
+- Optimized margins (10mm on all sides)
+- High-quality scaling (0.9x)
 - Extended timeouts for complex pages
+
+#### Orientation Control
+Control PDF orientation using the `landscape` parameter:
+
+**Portrait Mode (Vertical):**
+```json
+{
+  "url": "https://example.com",
+  "landscape": false
+}
+```
+
+**Landscape Mode (Horizontal) - Default:**
+```json
+{
+  "url": "https://example.com",
+  "landscape": true
+}
+```
+
+**Note:** If `landscape` parameter is omitted, the default is `true` (landscape mode).
 
 ### Image Loading Optimization
 - Waits for all images to load completely
