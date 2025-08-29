@@ -728,12 +728,13 @@ app.get('/files', apiKeyAuth, (req, res) => {
             const timeRemaining = expiresAt.getTime() - Date.now();
             const isExpired = timeRemaining <= 0;
             
+            const { host, protocol } = getHostInfo(req);
             return {
                 filename: filename,
                 createdAt: createdAt.toISOString(),
                 expiresAt: expiresAt.toISOString(),
                 status: isExpired ? 'expired' : 'active',
-                downloadUrl: `${req.protocol}://${req.get('host')}/download/${filename}`,
+                downloadUrl: `${protocol}://${host}/download/${filename}`,
                 timeRemaining: formatTimeRemaining(timeRemaining)
             };
         });
