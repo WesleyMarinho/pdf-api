@@ -1,0 +1,467 @@
+{
+	"info": {
+		"_postman_id": "pdf-api-collection-2024",
+		"name": "PDF Generation API v1.5.0",
+		"description": "Complete collection for PDF Generation API with security enhancements and HTTPS enforcement. This API generates PDFs from URLs using Puppeteer with optimized rendering and comprehensive security features.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "pdf-api-exporter"
+	},
+	"item": [
+		{
+			"name": "PDF Generation",
+			"description": "Endpoints for generating PDFs from URLs",
+			"item": [
+				{
+					"name": "Generate PDF from URL",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"url\": \"https://example.com\",\n  \"filename\": \"example-document\",\n  \"format\": \"A4\",\n  \"orientation\": \"portrait\",\n  \"margin\": {\n    \"top\": \"1cm\",\n    \"right\": \"1cm\",\n    \"bottom\": \"1cm\",\n    \"left\": \"1cm\"\n  },\n  \"printBackground\": true,\n  \"displayHeaderFooter\": false\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/generate-pdf",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"generate-pdf"
+							]
+						},
+						"description": "Generate a PDF from a given URL with customizable options including format, orientation, margins, and rendering settings."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"url\": \"https://example.com\",\n  \"filename\": \"example-document\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/generate-pdf",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"generate-pdf"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"success\": true,\n  \"message\": \"PDF generated successfully\",\n  \"filename\": \"example-document.pdf\",\n  \"downloadUrl\": \"/download/example-document.pdf\",\n  \"viewUrl\": \"/view/example-document.pdf\",\n  \"fileSize\": \"2.5 MB\",\n  \"generatedAt\": \"2024-01-20T10:30:00Z\",\n  \"expiresAt\": \"2024-01-21T10:30:00Z\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "File Management",
+			"description": "Endpoints for downloading, viewing and managing PDF files",
+			"item": [
+				{
+					"name": "Download PDF",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/pdf",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/download/:filename",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"download",
+								":filename"
+							],
+							"variable": [
+								{
+									"key": "filename",
+									"value": "example-document.pdf",
+									"description": "Name of the PDF file to download (must include .pdf extension)"
+								}
+							]
+						},
+						"description": "Download a PDF file with force download headers. File will be downloaded to user's device."
+					},
+					"response": [
+						{
+							"name": "PDF File Download",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/download/example-document.pdf",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"download",
+										"example-document.pdf"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "raw",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/pdf"
+								},
+								{
+									"key": "Content-Disposition",
+									"value": "attachment; filename=\"example-document.pdf\""
+								}
+							],
+							"cookie": [],
+							"body": "[PDF Binary Content]"
+						}
+					]
+				},
+				{
+					"name": "View PDF Inline",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/pdf",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/view/:filename",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"view",
+								":filename"
+							],
+							"variable": [
+								{
+									"key": "filename",
+									"value": "example-document.pdf",
+									"description": "Name of the PDF file to view inline (must include .pdf extension)"
+								}
+							]
+						},
+						"description": "View a PDF file inline in the browser without downloading."
+					},
+					"response": [
+						{
+							"name": "PDF Inline View",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/view/example-document.pdf",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"view",
+										"example-document.pdf"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "raw",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/pdf"
+								},
+								{
+									"key": "Content-Disposition",
+									"value": "inline; filename=\"example-document.pdf\""
+								}
+							],
+							"cookie": [],
+							"body": "[PDF Binary Content for Inline Display]"
+						}
+					]
+				},
+				{
+					"name": "List Available Files",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/files",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"files"
+							]
+						},
+						"description": "List all available PDF files with their expiration times and status."
+					},
+					"response": [
+						{
+							"name": "Files List",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/files",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"files"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"success\": true,\n  \"files\": [\n    {\n      \"filename\": \"example-document.pdf\",\n      \"size\": \"2.5 MB\",\n      \"createdAt\": \"2024-01-20T10:30:00Z\",\n      \"expiresAt\": \"2024-01-21T10:30:00Z\",\n      \"status\": \"available\",\n      \"downloadUrl\": \"/download/example-document.pdf\",\n      \"viewUrl\": \"/view/example-document.pdf\"\n    },\n    {\n      \"filename\": \"report-2024.pdf\",\n      \"size\": \"1.8 MB\",\n      \"createdAt\": \"2024-01-20T09:15:00Z\",\n      \"expiresAt\": \"2024-01-21T09:15:00Z\",\n      \"status\": \"available\",\n      \"downloadUrl\": \"/download/report-2024.pdf\",\n      \"viewUrl\": \"/view/report-2024.pdf\"\n    }\n  ],\n  \"totalFiles\": 2,\n  \"totalSize\": \"4.3 MB\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "API Status & Debug",
+			"description": "Endpoints for API monitoring and debugging",
+			"item": [
+				{
+					"name": "API Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"status"
+							]
+						},
+						"description": "Check API health status and get system information."
+					},
+					"response": [
+						{
+							"name": "API Status Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/status",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"status"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"status\": \"healthy\",\n  \"version\": \"1.5.0\",\n  \"uptime\": \"2h 30m 15s\",\n  \"timestamp\": \"2024-01-20T12:45:30Z\",\n  \"endpoints\": {\n    \"POST /generate-pdf\": \"PDF generation from URLs\",\n    \"POST /debug-page\": \"Page debugging\",\n    \"GET /download/:filename\": \"Secure PDF download (force download)\",\n    \"GET /view/:filename\": \"Inline PDF viewing (open in browser)\",\n    \"GET /files\": \"List available files and expiration times\",\n    \"GET /status\": \"API Status\"\n  },\n  \"security\": {\n    \"download_headers\": \"Security headers configured\",\n    \"filename_validation\": \"Strict filename validation\",\n    \"stream_based\": \"Stream-based download for efficiency\",\n    \"https_enforced\": \"HTTPS protocol enforced\",\n    \"hsts_enabled\": \"HTTP Strict Transport Security active\"\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Debug Page",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"url\": \"https://example.com\",\n  \"debug\": true,\n  \"includeScreenshot\": true,\n  \"includeConsole\": true,\n  \"includeNetwork\": false\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/debug-page",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"debug-page"
+							]
+						},
+						"description": "Debug page loading and rendering issues with detailed information."
+					},
+					"response": [
+						{
+							"name": "Debug Information",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"url\": \"https://example.com\",\n  \"debug\": true\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/debug-page",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"debug-page"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"success\": true,\n  \"url\": \"https://example.com\",\n  \"pageInfo\": {\n    \"title\": \"Example Domain\",\n    \"loadTime\": \"1.2s\",\n    \"finalUrl\": \"https://example.com\",\n    \"statusCode\": 200\n  },\n  \"resources\": {\n    \"images\": 3,\n    \"scripts\": 2,\n    \"stylesheets\": 1,\n    \"fonts\": 0\n  },\n  \"console\": [\n    {\n      \"level\": \"info\",\n      \"message\": \"Page loaded successfully\",\n      \"timestamp\": \"2024-01-20T12:45:30Z\"\n    }\n  ],\n  \"errors\": [],\n  \"screenshot\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==\"\n}"
+						}
+					]
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Set base URL if not already set",
+					"if (!pm.environment.get('base_url')) {",
+					"    pm.environment.set('base_url', 'http://localhost:3000');",
+					"}",
+					"",
+					"// Add timestamp for unique filenames",
+					"pm.environment.set('timestamp', new Date().getTime());"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Basic response validation",
+					"pm.test('Status code is successful', function () {",
+					"    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]);",
+					"});",
+					"",
+					"// Check response time",
+					"pm.test('Response time is reasonable', function () {",
+					"    pm.expect(pm.response.responseTime).to.be.below(30000);",
+					"});",
+					"",
+					"// Security headers validation",
+					"pm.test('Security headers present', function () {",
+					"    pm.expect(pm.response.headers.get('X-Content-Type-Options')).to.eql('nosniff');",
+					"    pm.expect(pm.response.headers.get('X-Frame-Options')).to.eql('DENY');",
+					"});"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string",
+			"description": "Base URL for the PDF Generation API"
+		},
+		{
+			"key": "api_version",
+			"value": "1.5.0",
+			"type": "string",
+			"description": "Current API version"
+		}
+	]
+}

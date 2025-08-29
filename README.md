@@ -4,6 +4,14 @@
 
 A robust and secure API for generating high-quality PDFs from URLs using Puppeteer with advanced image loading, chart rendering, and security features.
 
+## 🔗 Important Access Links
+
+- **API Base URL**: `http://localhost:3000` (Development)
+- **API Status**: `GET /status`
+- **Postman Collection**: [Download JSON](./postman-collection.json)
+- **GitHub Repository**: [PDF API Repository](https://github.com/your-username/pdf-api)
+- **Live Demo**: Coming Soon
+
 ## 🚀 Features
 
 - **High-Quality PDF Generation**: Convert web pages to PDFs with excellent resolution
@@ -68,6 +76,106 @@ A robust and secure API for generating high-quality PDFs from URLs using Puppete
 - **File Expiration**: 24 hours
 - **Cleanup Interval**: 15 minutes
 - **Supported Formats**: PDF only
+
+## 📋 Postman Collection
+
+### Prerequisites and Dependencies
+
+Before using the Postman collection, ensure you have:
+
+1. **Postman Desktop App** (recommended) or **Postman Web**
+   - Download from: https://www.postman.com/downloads/
+   - Version 10.0+ recommended for full feature support
+
+2. **API Server Running**
+   - Start the server: `npm start` or `node server.js`
+   - Default URL: `http://localhost:3000`
+   - Verify status: `GET http://localhost:3000/status`
+
+3. **Environment Setup**
+   - The collection includes pre-configured variables
+   - Base URL is set to `http://localhost:3000` by default
+   - Can be modified for production environments
+
+### 📥 How to Import and Use the Postman Collection
+
+#### Step 1: Download the Collection
+1. Download the `postman-collection.json` file from this repository
+2. Save it to your local machine
+
+#### Step 2: Import into Postman
+1. Open Postman Desktop App
+2. Click **"Import"** button (top-left corner)
+3. Select **"Upload Files"** tab
+4. Choose the downloaded `postman-collection.json` file
+5. Click **"Import"** to add the collection
+
+#### Step 3: Configure Environment (Optional)
+1. The collection includes default variables:
+   - `base_url`: `http://localhost:3000`
+   - `api_version`: `1.5.0`
+2. To modify for production:
+   - Go to **Environments** tab
+   - Create new environment or edit existing
+   - Set `base_url` to your production URL
+
+#### Step 4: Test the Collection
+1. Ensure your API server is running
+2. Start with the **"API Status"** request to verify connectivity
+3. Use **"Generate PDF from URL"** to create your first PDF
+4. Test file management endpoints as needed
+
+### 🔧 Collection Structure
+
+The Postman collection is organized into **3 main folders**:
+
+#### 1. **PDF Generation**
+- `POST /generate-pdf` - Generate PDF from URL with full customization options
+
+#### 2. **File Management**
+- `GET /download/:filename` - Download PDF files (force download)
+- `GET /view/:filename` - View PDF files inline in browser
+- `GET /files` - List all available files with expiration info
+
+#### 3. **API Status & Debug**
+- `GET /status` - Check API health and system information
+- `POST /debug-page` - Debug page loading and rendering issues
+
+### 🧪 Built-in Tests and Validation
+
+Each request includes automatic tests for:
+- **Status Code Validation**: Ensures successful responses (200, 201, 202)
+- **Response Time Check**: Validates reasonable response times (<30s)
+- **Security Headers**: Verifies presence of security headers
+- **Content Type Validation**: Ensures proper content types
+
+### 📝 Example Usage Scenarios
+
+#### Scenario 1: Basic PDF Generation
+1. Use **"Generate PDF from URL"** request
+2. Modify the URL in the request body
+3. Customize filename and format options
+4. Send request and note the response URLs
+5. Use **"Download PDF"** or **"View PDF Inline"** with the filename
+
+#### Scenario 2: Debugging Issues
+1. If PDF generation fails, use **"Debug Page"** request
+2. Include the problematic URL
+3. Enable debug options (screenshot, console, network)
+4. Analyze the detailed response for troubleshooting
+
+#### Scenario 3: File Management
+1. Use **"List Available Files"** to see all generated PDFs
+2. Check expiration times and file sizes
+3. Download or view files as needed
+
+### 🔒 Security Considerations
+
+- All requests include proper security headers
+- HTTPS enforcement is configured (redirects HTTP to HTTPS in production)
+- Filename validation prevents directory traversal attacks
+- Stream-based downloads for efficiency and security
+- HSTS (HTTP Strict Transport Security) headers included
 
 ## 📚 API Documentation
 
