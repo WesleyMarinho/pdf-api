@@ -9,7 +9,7 @@ A robust and secure API for generating high-quality PDFs from URLs using Puppete
 - **API Base URL**: `http://localhost:3000` (Development)
 - **API Status**: `GET /status`
 - **Postman Collection**: [Download JSON](./postman-collection.json)
-- **GitHub Repository**: [PDF API Repository](https://github.com/your-username/pdf-api)
+- **GitHub Repository**: [PDF API Repository](https://github.com/WesleyMarinho/pdf-api)
 - **Live Demo**: Coming Soon
 
 ## 🚀 Features
@@ -70,6 +70,44 @@ A robust and secure API for generating high-quality PDFs from URLs using Puppete
 | `API_KEY` | API authentication key | Required |
 | `NODE_ENV` | Environment mode | `development` |
 
+### API Key Configuration
+
+**IMPORTANT**: The API key is required for the following endpoints:
+- `POST /generate-pdf` - Generate PDF from URL
+- `GET /files` - List available files
+- `POST /debug-page` - Debug page information
+
+**Public endpoints** (no API key required):
+- `GET /status` - API status
+- `GET /download/:filename` - Download PDF files
+- `GET /view/:filename` - View PDF files inline
+
+#### Setting up your API Key:
+
+1. **Copy the example environment file:**
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Generate a secure API key:**
+   ```bash
+   # Example of a secure API key
+   API_KEY=pdf_api_2024_secure_key_abc123xyz789
+   ```
+
+3. **Update your .env file:**
+   ```env
+   API_KEY=your-actual-secure-api-key-here
+   ```
+
+4. **Restart the server** after updating the .env file.
+
+#### Troubleshooting API Key Issues:
+
+- **Error 500 "Server configuration error"**: The API_KEY environment variable is not set
+- **Error 401 "Unauthorized"**: Invalid or missing API key in request headers
+- **Solution**: Ensure your .env file exists and contains a valid API_KEY value
+
 ### File Management
 
 - **Output Directory**: `./generated-pdfs/`
@@ -95,6 +133,8 @@ Before using the Postman collection, ensure you have:
 3. **Environment Setup**
    - The collection includes pre-configured variables
    - Base URL is set to `http://localhost:3000` by default
+   - Valid API key configured in environment variables (see [API Key Configuration](#api-key-configuration))
+   - `.env` file with API_KEY variable set
    - Can be modified for production environments
 
 ### 📥 How to Import and Use the Postman Collection
@@ -118,6 +158,13 @@ Before using the Postman collection, ensure you have:
    - Go to **Environments** tab
    - Create new environment or edit existing
    - Set `base_url` to your production URL
+   - **Set `api_key` to your actual API key from .env file**
+
+#### Step 4: Configure API Key in Postman
+1. After importing, go to the collection variables
+2. Update the `api_key` variable with your actual API key
+3. Or set it as an environment variable in Postman
+4. The key will be automatically included in protected endpoints
 
 #### Step 4: Test the Collection
 1. Ensure your API server is running

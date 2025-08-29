@@ -25,6 +25,12 @@
 								"key": "Accept",
 								"value": "application/json",
 								"type": "text"
+							},
+							{
+								"key": "X-API-KEY",
+								"value": "{{api_key}}",
+								"type": "text",
+								"description": "API authentication key (required)"
 							}
 						],
 						"body": {
@@ -231,6 +237,12 @@
 								"key": "Accept",
 								"value": "application/json",
 								"type": "text"
+							},
+							{
+								"key": "X-API-KEY",
+								"value": "{{api_key}}",
+								"type": "text",
+								"description": "API authentication key (required)"
 							}
 						],
 						"url": {
@@ -346,6 +358,12 @@
 								"key": "Accept",
 								"value": "application/json",
 								"type": "text"
+							},
+							{
+								"key": "X-API-KEY",
+								"value": "{{api_key}}",
+								"type": "text",
+								"description": "API authentication key (required)"
 							}
 						],
 						"body": {
@@ -462,6 +480,12 @@
 			"value": "1.5.0",
 			"type": "string",
 			"description": "Current API version"
+		},
+		{
+			"key": "api_key",
+			"value": "your-secure-api-key-here",
+			"type": "string",
+			"description": "API authentication key - replace with your actual API key from .env file"
 		}
 	]
 }
