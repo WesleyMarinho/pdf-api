@@ -800,11 +800,14 @@ app.get('/view/:filename', (req, res) => {
 });
 
 app.get('/status', (req, res) => {
+    const versionInfo = config.getVersionInfo();
+    
     res.json({
         status: 'running',
         timestamp: new Date().toISOString(),
-        version: '1.4.0',
-        features: ['Image Loading', 'Chart Rendering', 'PDF Generation', 'Secure Downloads', 'Inline Viewing'],
+        ...versionInfo,
+        environment: config.NODE_ENV,
+        uptime: process.uptime(),
         endpoints: {
             'POST /generate-pdf': 'Generate PDF with images and charts',
             'POST /debug-page': 'Page debugging',
@@ -816,7 +819,13 @@ app.get('/status', (req, res) => {
         security: {
             'download_headers': 'Security headers configured',
             'filename_validation': 'Strict filename validation',
-            'stream_based': 'Stream-based download for efficiency'
+            'stream_based': 'Stream-based download for efficiency',
+            'api_key_auth': 'API key authentication enabled'
+        },
+        system: {
+            'node_version': process.version,
+            'platform': process.platform,
+            'memory_usage': process.memoryUsage()
         }
     });
 });

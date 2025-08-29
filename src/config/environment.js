@@ -4,8 +4,15 @@
  */
 
 require('dotenv').config();
+const { getApiVersionInfo, VERSION_INFO } = require('./version');
 
 const config = {
+    // Application Information
+    APP_NAME: VERSION_INFO.apiName,
+    APP_VERSION: VERSION_INFO.version,
+    APP_DESCRIPTION: VERSION_INFO.description,
+    BUILD_DATE: VERSION_INFO.buildDate,
+    
     // Server Configuration
     PORT: process.env.PORT || 3000,
     NODE_ENV: process.env.NODE_ENV || 'development',
@@ -26,6 +33,9 @@ const config = {
     // Development Configuration
     isDevelopment: () => config.NODE_ENV === 'development',
     isProduction: () => config.NODE_ENV === 'production',
+    
+    // Version Information
+    getVersionInfo: () => getApiVersionInfo(),
     
     // Validation
     validate: () => {
