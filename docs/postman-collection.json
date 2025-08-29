@@ -483,9 +483,9 @@
 		},
 		{
 			"key": "api_key",
-			"value": "your-secure-api-key-here",
+			"value": "7IEICHQjqAi9HnNUz4TerLiczll9PBHa",
 			"type": "string",
-			"description": "API authentication key - replace with your actual API key from .env file"
+			"description": "API authentication key - loaded from .env file"
 		}
 	]
 }
