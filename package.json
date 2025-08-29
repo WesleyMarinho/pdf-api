@@ -1,6 +1,6 @@
 {
   "name": "pdf-generation-api",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "API for generating PDFs from URLs using Puppeteer with resolution and rendering improvements",
   "main": "pdf-api-improved.js",
   "scripts": {

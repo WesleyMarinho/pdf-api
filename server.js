@@ -53,6 +53,21 @@ setInterval(cleanupOldFiles, CLEANUP_INTERVAL_MS);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// HTTPS enforcement middleware
+app.use((req, res, next) => {
+    // Force HTTPS in production
+    if (req.header('x-forwarded-proto') !== 'https' && process.env.NODE_ENV === 'production') {
+        return res.redirect(301, `https://${req.header('host')}${req.url}`);
+    }
+    
+    // Force HTTPS for all environments if not localhost
+    if (!req.secure && req.get('host') !== 'localhost:3000' && req.get('host') !== '127.0.0.1:3000') {
+        return res.redirect(301, `https://${req.get('host')}${req.url}`);
+    }
+    
+    next();
+});
+
 // Global security middleware
 app.use((req, res, next) => {
     // Basic security headers for all responses
@@ -62,6 +77,11 @@ app.use((req, res, next) => {
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
     res.setHeader('X-Download-Options', 'noopen');
+    
+    // HTTPS Strict Transport Security (HSTS)
+    if (req.secure || req.header('x-forwarded-proto') === 'https') {
+        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+    }
     
     // CORS headers para permitir acesso de qualquer origem
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -675,7 +695,7 @@ app.get('/status', (req, res) => {
             'POST /debug-page': 'Page debugging',
             'GET /download/:filename': 'Secure PDF download (force download)',
             'GET /view/:filename': 'Inline PDF viewing (open in browser)',
-            'GET /files': 'List available files and expiration times'
+            'GET /files': 'List available files and expiration times',
             'GET /status': 'API Status'
         },
         security: {
