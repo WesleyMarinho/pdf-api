@@ -14,6 +14,7 @@ const config = {
     BUILD_DATE: VERSION_INFO.buildDate,
     
     // Server Configuration
+    PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || 'http://localhost',
     PORT: process.env.PORT || 3000,
     NODE_ENV: process.env.NODE_ENV || 'development',
     
