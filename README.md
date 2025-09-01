@@ -2,7 +2,7 @@
 
 ![PDF API](./public/assets/icon.svg)
 
-A robust and secure API for generating high-quality PDFs from URLs using Puppeteer with advanced image loading, chart rendering, and security features.
+A robust and secure API for generating high-quality PDFs from URLs using Puppeteer with advanced image loading, chart rendering, automatic file replacement, and comprehensive security features.
 
 ## 🔗 Important Access Links
 
@@ -17,17 +17,28 @@ A robust and secure API for generating high-quality PDFs from URLs using Puppete
 - **High-Quality PDF Generation**: Convert web pages to PDFs with excellent resolution
 - **Advanced Image Loading**: Optimized loading for all image types including lazy-loaded content
 - **Chart Rendering Support**: Full support for ApexCharts, ECharts, and other dynamic charts
+- **Automatic File Replacement**: Intelligent file management that replaces existing files with the same name
 - **Security Headers**: Comprehensive security headers to prevent browser warnings
-- **File Management**: Automatic cleanup of old files with configurable expiration
+- **File Management**: Automatic cleanup of old files with configurable expiration (1 hour default)
 - **Multiple Download Options**: Force download or inline viewing
 - **Stream-Based Downloads**: Efficient file serving with proper error handling
 - **API Key Authentication**: Secure access control
+- **Filename Sanitization**: Automatic filename validation and sanitization
 
-## 📋 Requirements
+## 📋 System Requirements
 
-- Node.js 14+ 
-- npm or yarn
-- Chrome/Chromium (automatically installed with Puppeteer)
+### Minimum Requirements
+- **Node.js**: 16.0.0 or higher (recommended: 18.x LTS)
+- **npm**: 8.0.0 or higher
+- **Memory**: 2GB RAM minimum (4GB recommended for complex pages)
+- **Storage**: 1GB free space for temporary PDF files
+- **Operating System**: Windows 10+, macOS 10.14+, or Linux (Ubuntu 18.04+)
+
+### Dependencies
+- **Chrome/Chromium**: Automatically installed with Puppeteer
+- **Express.js**: Web framework for API endpoints
+- **Puppeteer**: Headless Chrome automation
+- **dotenv**: Environment variable management
 
 ## 🛠️ Installation
 
@@ -55,10 +66,44 @@ A robust and secure API for generating high-quality PDFs from URLs using Puppete
 
 5. **Start the server**
    ```bash
+   # Production mode
    npm start
-   # or
+   
+   # Development mode with auto-restart
+   npm run dev
+   
+   # Direct execution
    node server.js
    ```
+
+## 📦 Available Scripts
+
+| Script | Command | Description |
+|--------|---------|-------------|
+| `start` | `npm start` | Start the server in production mode |
+| `dev` | `npm run dev` | Start the server in development mode with auto-restart (nodemon) |
+| `version:check` | `npm run version:check` | Display current version |
+| `version:patch` | `npm run version:patch` | Increment patch version (1.0.0 → 1.0.1) |
+| `version:minor` | `npm run version:minor` | Increment minor version (1.0.0 → 1.1.0) |
+| `version:major` | `npm run version:major` | Increment major version (1.0.0 → 2.0.0) |
+
+### Development Workflow
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server with auto-restart
+npm run dev
+
+# Check current version
+npm run version:check
+
+# Update version before deployment
+npm run version:patch  # for bug fixes
+npm run version:minor  # for new features
+npm run version:major  # for breaking changes
+```
 
 ## 🔧 Configuration
 
@@ -79,7 +124,7 @@ A robust and secure API for generating high-quality PDFs from URLs using Puppete
 |----------|-------------|---------|-------|
 | `PUPPETEER_TIMEOUT` | Puppeteer browser timeout (ms) | `120000` | 2 minutes |
 | `PDF_GENERATION_TIMEOUT` | PDF generation timeout (ms) | `60000` | 1 minute |
-| `FILE_EXPIRATION_MS` | File expiration time (ms) | `604800000` | 7 days |
+| `FILE_EXPIRATION_MS` | File expiration time (ms) | `3600000` | 1 hour |
 | `CLEANUP_INTERVAL_MS` | Cleanup interval (ms) | `900000` | 15 minutes |
 
 #### Complete .env Example
@@ -87,20 +132,20 @@ A robust and secure API for generating high-quality PDFs from URLs using Puppete
 ```env
 # Advanced PDF Generation API Configuration
 
-## Server Settings
+## Server Configuration
 PORT=3000                  # Server execution port (default: 3000)
-NODE_ENV=development       # Execution environment (development/production)
+NODE_ENV=development       # Runtime environment (development/production)
 
-## Security Settings
+## Security Configuration
 HTTPS_REDIRECT=false       # Redirect HTTP to HTTPS (true/false)
-API_KEY=7IEICHQjqAi9HnNUz4TerLiczll9PBHa  # Secret key for API authentication
+API_KEY=your_secret_api_key_here  # Secret key for API authentication
 
-## Performance Settings
+## Performance Configuration
 PUPPETEER_TIMEOUT=120000   # Puppeteer timeout in milliseconds (2 minutes)
 PDF_GENERATION_TIMEOUT=60000 # PDF generation timeout in milliseconds (1 minute)
 
 ## File Management
-FILE_EXPIRATION_MS=604800000 # File expiration time in milliseconds (7 days)
+FILE_EXPIRATION_MS=3600000 # File expiration time in milliseconds (1 hour)
 CLEANUP_INTERVAL_MS=900000  # Cleanup interval in milliseconds (15 minutes)
 ```
 
@@ -145,10 +190,32 @@ CLEANUP_INTERVAL_MS=900000  # Cleanup interval in milliseconds (15 minutes)
 ### File Management
 
 - **Output Directory**: `./generated-pdfs/`
-- **File Expiration**: Configurable via `FILE_EXPIRATION_MS` (default: 7 days)
+- **File Expiration**: Configurable via `FILE_EXPIRATION_MS` (default: 1 hour)
 - **Cleanup Interval**: Configurable via `CLEANUP_INTERVAL_MS` (default: 15 minutes)
 - **Supported Formats**: PDF only
 - **Automatic Cleanup**: Old files are automatically removed based on expiration settings
+- **File Replacement**: Existing files with the same name are automatically replaced
+
+#### Automatic File Replacement
+
+The API now includes intelligent file replacement functionality:
+
+- **Same Name Detection**: When generating a PDF with a filename that already exists, the system automatically detects the conflict
+- **Old File Removal**: The existing file is completely removed before creating the new one
+- **Seamless Replacement**: Only the latest version of the file remains, ensuring no duplicates
+- **Logging**: All file replacement operations are logged for monitoring
+- **Expiration Maintained**: The new file maintains the standard 1-hour expiration time
+
+**Example Behavior:**
+1. Generate PDF with filename `report.pdf` → File created
+2. Generate another PDF with filename `report.pdf` → Old file removed, new file created
+3. Only the latest `report.pdf` exists in the system
+
+**Benefits:**
+- Prevents storage bloat from duplicate files
+- Ensures users always get the most recent version
+- Maintains consistent file management
+- Automatic cleanup without manual intervention
 
 ### 📊 Logging and Monitoring
 
@@ -574,54 +641,542 @@ The API provides detailed logging for:
 ## 🚀 Deployment
 
 ### Docker Deployment
-```dockerfile
-# Use the provided Dockerfile
+
+#### Build and Run
+```bash
+# Build the Docker image
 docker build -t pdf-api .
-docker run -p 3000:3000 -e API_KEY=your-key pdf-api
+
+# Run with environment variables
+docker run -d \
+  --name pdf-api-container \
+  -p 3000:3000 \
+  -e API_KEY=your-secure-api-key \
+  -e NODE_ENV=production \
+  -e FILE_EXPIRATION_MS=3600000 \
+  -v $(pwd)/generated-pdfs:/app/generated-pdfs \
+  pdf-api
+
+# Check container status
+docker ps
+docker logs pdf-api-container
 ```
 
-### Production Considerations
-- Set `NODE_ENV=production`
-- Use a strong API key
-- Configure reverse proxy (nginx/Apache)
-- Set up SSL/TLS certificates
-- Monitor disk space for PDF storage
-- Configure log rotation
+#### Docker Compose
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  pdf-api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - API_KEY=your-secure-api-key
+      - FILE_EXPIRATION_MS=3600000
+      - PUPPETEER_TIMEOUT=120000
+    volumes:
+      - ./generated-pdfs:/app/generated-pdfs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+```
+
+### Production Configuration
+
+#### Environment Setup
+```env
+# Production .env configuration
+NODE_ENV=production
+PORT=3000
+HTTPS_REDIRECT=true
+API_KEY=your-very-secure-production-api-key
+
+# Optimized timeouts for production
+PUPPETEER_TIMEOUT=120000
+PDF_GENERATION_TIMEOUT=60000
+
+# Conservative file management
+FILE_EXPIRATION_MS=3600000    # 1 hour
+CLEANUP_INTERVAL_MS=900000    # 15 minutes
+```
+
+#### Security Considerations
+
+1. **API Key Security**
+   ```bash
+   # Generate a strong API key
+   openssl rand -hex 32
+   # Example: a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456
+   ```
+
+2. **Reverse Proxy Configuration (Nginx)**
+   ```nginx
+   server {
+       listen 80;
+       server_name your-domain.com;
+       return 301 https://$server_name$request_uri;
+   }
+   
+   server {
+       listen 443 ssl http2;
+       server_name your-domain.com;
+       
+       ssl_certificate /path/to/certificate.crt;
+       ssl_certificate_key /path/to/private.key;
+       
+       # Security headers
+       add_header X-Frame-Options DENY;
+       add_header X-Content-Type-Options nosniff;
+       add_header X-XSS-Protection "1; mode=block";
+       
+       location / {
+           proxy_pass http://localhost:3000;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           
+           # Increase timeout for PDF generation
+           proxy_read_timeout 300s;
+           proxy_connect_timeout 75s;
+       }
+   }
+   ```
+
+3. **Firewall Configuration**
+   ```bash
+   # Allow only necessary ports
+   ufw allow 22    # SSH
+   ufw allow 80    # HTTP
+   ufw allow 443   # HTTPS
+   ufw enable
+   ```
+
+#### Monitoring and Logging
+
+1. **Process Management (PM2)**
+   ```bash
+   # Install PM2
+   npm install -g pm2
+   
+   # Start application
+   pm2 start server.js --name pdf-api
+   
+   # Configure auto-restart
+   pm2 startup
+   pm2 save
+   
+   # Monitor
+   pm2 status
+   pm2 logs pdf-api
+   pm2 monit
+   ```
+
+2. **Log Rotation**
+   ```bash
+   # Configure logrotate
+   sudo nano /etc/logrotate.d/pdf-api
+   ```
+   
+   ```
+   /var/log/pdf-api/*.log {
+       daily
+       missingok
+       rotate 52
+       compress
+       delaycompress
+       notifempty
+       create 644 www-data www-data
+   }
+   ```
+
+#### Performance Optimization
+
+1. **System Resources**
+   ```bash
+   # Increase file descriptor limits
+   echo "* soft nofile 65536" >> /etc/security/limits.conf
+   echo "* hard nofile 65536" >> /etc/security/limits.conf
+   
+   # Optimize Node.js memory
+   export NODE_OPTIONS="--max-old-space-size=4096"
+   ```
+
+2. **Disk Space Management**
+   ```bash
+   # Monitor disk usage
+   df -h
+   
+   # Set up automated cleanup
+   crontab -e
+   # Add: 0 */6 * * * find /path/to/generated-pdfs -name "*.pdf" -mtime +1 -delete
+   ```
+
+#### Health Checks
+
+```bash
+# Simple health check script
+#!/bin/bash
+response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/status)
+if [ $response -eq 200 ]; then
+    echo "API is healthy"
+    exit 0
+else
+    echo "API is down (HTTP $response)"
+    exit 1
+fi
+```
+
+#### Backup and Recovery
+
+1. **Database Backup** (if using database)
+   ```bash
+   # Backup generated files
+   tar -czf pdf-backup-$(date +%Y%m%d).tar.gz generated-pdfs/
+   
+   # Automated backup script
+   #!/bin/bash
+   BACKUP_DIR="/backup/pdf-api"
+   DATE=$(date +%Y%m%d_%H%M%S)
+   
+   mkdir -p $BACKUP_DIR
+   tar -czf $BACKUP_DIR/pdf-files-$DATE.tar.gz generated-pdfs/
+   
+   # Keep only last 7 days of backups
+   find $BACKUP_DIR -name "pdf-files-*.tar.gz" -mtime +7 -delete
+   ```
+
+2. **Configuration Backup**
+   ```bash
+   # Backup configuration files
+   cp .env .env.backup
+   cp package.json package.json.backup
+   ```
+
+3. **Recovery Process**
+   ```bash
+   # Restore from backup
+   tar -xzf pdf-backup-20240109.tar.gz
+   
+   # Restore configuration
+   cp .env.backup .env
+   
+   # Restart services
+   pm2 restart pdf-api
+   ```
 
 ## 🤝 Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+We welcome contributions! Please follow these guidelines:
+
+### Development Setup
+```bash
+# Fork and clone the repository
+git clone https://github.com/your-username/pdf-api.git
+cd pdf-api
+
+# Install dependencies
+npm install
+
+# Create feature branch
+git checkout -b feature/your-feature-name
+
+# Make your changes and test
+npm run dev
+
+# Run tests (if available)
+npm test
+
+# Commit with conventional commits
+git commit -m "feat: add new feature description"
+
+# Push and create PR
+git push origin feature/your-feature-name
+```
+
+### Contribution Guidelines
+
+1. **Code Style**
+   - Follow existing code formatting
+   - Use meaningful variable names
+   - Add comments for complex logic
+   - Keep functions small and focused
+
+2. **Testing**
+   - Test your changes thoroughly
+   - Include edge cases
+   - Verify error handling
+   - Test with different HTML inputs
+
+3. **Documentation**
+   - Update README if needed
+   - Document new environment variables
+   - Add examples for new features
+   - Update API documentation
+
+4. **Pull Request Process**
+   - Provide clear description
+   - Include screenshots if UI changes
+   - Reference related issues
+   - Ensure CI passes
+
+### Reporting Issues
+
+When reporting bugs, please include:
+- **Environment details** (OS, Node.js version, npm version)
+- **Steps to reproduce** the issue
+- **Expected vs actual behavior**
+- **Error logs** and stack traces
+- **Sample HTML** that causes the issue
+- **Configuration** (sanitized .env)
 
 ## 📄 License
 
-MIT License - see LICENSE file for details.
+This project is licensed under the **MIT License**.
 
-## 🆘 Support
+```
+MIT License
 
-For issues and questions:
-- Create an issue on GitHub
-- Check the API status endpoint
-- Review the logs for error details
+Copyright (c) 2024 PDF API
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+See the [LICENSE](LICENSE) file for full details.
+
+## 📞 Support
+
+### Self-Help Resources
+
+1. **Documentation**
+   - Read this README thoroughly
+   - Check the troubleshooting section
+   - Review API documentation
+   - Examine example requests
+
+2. **Debugging Steps**
+   - Enable debug mode: `DEBUG=pdf-api npm start`
+   - Check server logs for errors
+   - Verify environment variables
+   - Test with simple HTML first
+   - Monitor system resources
+
+3. **Common Solutions**
+   - Restart the server
+   - Clear generated-pdfs folder
+   - Check disk space
+   - Verify API key
+   - Update dependencies
+
+### Getting Help
+
+If you need assistance:
+
+1. **GitHub Issues** (Preferred)
+   - Search existing issues first
+   - Use issue templates
+   - Provide complete information
+   - Include reproducible examples
+
+2. **Community Support**
+   - Check discussions tab
+   - Share solutions you find
+   - Help others with similar issues
+
+3. **Professional Support**
+   - For enterprise deployments
+   - Custom feature development
+   - Performance optimization
+   - Security audits
+
+### Issue Template
+
+```markdown
+**Environment:**
+- OS: [e.g., Ubuntu 20.04, Windows 10]
+- Node.js: [e.g., 18.17.0]
+- npm: [e.g., 9.6.7]
+- PDF API Version: [e.g., 1.0.0]
+
+**Description:**
+[Clear description of the issue]
+
+**Steps to Reproduce:**
+1. [First step]
+2. [Second step]
+3. [Third step]
+
+**Expected Behavior:**
+[What you expected to happen]
+
+**Actual Behavior:**
+[What actually happened]
+
+**Error Logs:**
+```
+[Paste error logs here]
+```
+
+**Sample HTML:**
+```html
+[Minimal HTML that reproduces the issue]
+```
+
+**Configuration:**
+```env
+[Sanitized .env file - remove sensitive data]
+```
+```
+
+## 🔧 Troubleshooting
+
+### Common Issues and Solutions
+
+#### 1. Server Won't Start
+**Problem**: Server fails to start or crashes immediately
+
+**Solutions**:
+```bash
+# Check if port is already in use
+netstat -ano | findstr :3000  # Windows
+lsof -i :3000                 # macOS/Linux
+
+# Kill process using the port
+taskkill /PID <PID> /F        # Windows
+kill -9 <PID>                 # macOS/Linux
+
+# Try different port
+PORT=3001 npm start
+```
+
+#### 2. API Key Issues
+**Problem**: "Unauthorized: Invalid or missing API Key" error
+
+**Solutions**:
+1. Ensure `.env` file exists in project root
+2. Verify `API_KEY` is set in `.env` file
+3. Restart server after changing `.env`
+4. Check API key in request headers: `X-API-Key: your-key`
+
+#### 3. PDF Generation Fails
+**Problem**: PDF generation returns errors or timeouts
+
+**Solutions**:
+```bash
+# Increase timeouts in .env
+PUPPETEER_TIMEOUT=180000      # 3 minutes
+PDF_GENERATION_TIMEOUT=120000 # 2 minutes
+
+# Check target URL accessibility
+curl -I https://target-url.com
+
+# Verify sufficient disk space
+df -h  # Linux/macOS
+dir    # Windows
+```
+
+#### 4. Memory Issues
+**Problem**: Server crashes with out-of-memory errors
+
+**Solutions**:
+```bash
+# Increase Node.js memory limit
+node --max-old-space-size=4096 server.js
+
+# Or set in package.json scripts
+"start": "node --max-old-space-size=4096 server.js"
+```
+
+#### 5. File Not Found Errors
+**Problem**: Generated PDFs return 404 errors
+
+**Solutions**:
+1. Check if `generated-pdfs` directory exists
+2. Verify file hasn't expired (default: 1 hour)
+3. Ensure filename matches exactly (case-sensitive)
+4. Check file permissions
+
+### Performance Optimization
+
+#### For Large/Complex Pages
+```env
+# Increase timeouts
+PUPPETEER_TIMEOUT=300000      # 5 minutes
+PDF_GENERATION_TIMEOUT=180000 # 3 minutes
+
+# Reduce cleanup frequency for better performance
+CLEANUP_INTERVAL_MS=1800000   # 30 minutes
+```
+
+#### For High Traffic
+```env
+# Reduce file expiration to save disk space
+FILE_EXPIRATION_MS=1800000    # 30 minutes
+
+# More frequent cleanup
+CLEANUP_INTERVAL_MS=300000    # 5 minutes
+```
+
+### Debug Mode
+
+Enable detailed logging by setting:
+```env
+NODE_ENV=development
+```
+
+This provides:
+- Detailed error messages
+- Request/response logging
+- File operation logs
+- Performance metrics
+
+### Quick Support Links
+
+- **API Status**: `GET /status` - Check system health
+- **Debug Endpoint**: `POST /debug-page` - Test page rendering
+- **GitHub Issues**: Report bugs and request features
+- **Documentation**: This README and Postman collection
 
 ## 🔄 Changelog
 
-### v1.4.0
-- Added comprehensive security headers
-- Implemented inline PDF viewing
-- Enhanced filename validation
-- Stream-based file downloads
-- Improved error handling
-- Added CORS support
+### v1.0.0 (Current)
+- **Automatic File Replacement**: Intelligent file management that replaces existing files with the same name
+- **Enhanced File Management**: 1-hour default expiration with configurable cleanup intervals
+- **Filename Sanitization**: Automatic validation and sanitization of custom filenames
+- **Comprehensive Security Headers**: Full security header implementation
+- **Inline PDF Viewing**: Support for both download and inline viewing
+- **Stream-Based Downloads**: Efficient file serving with proper error handling
+- **Advanced Image Loading**: Optimized loading for all image types including lazy-loaded content
+- **Chart Rendering Support**: Full support for ApexCharts, ECharts, and other dynamic charts
+- **API Key Authentication**: Secure access control for protected endpoints
+- **Environment Configuration**: Comprehensive environment variable management
+- **Development Tools**: Auto-restart development mode and version management scripts
+- **Error Handling**: Detailed error responses and logging
+- **CORS Support**: Cross-origin resource sharing configuration
 
-### v1.3.0
-- Enhanced image loading optimization
-- Added chart rendering support
-- Improved PDF quality
-- Added file management features
+### Previous Versions
+- **v0.x**: Initial development and feature implementation
 
 ---
 
