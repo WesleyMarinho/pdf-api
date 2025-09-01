@@ -104,19 +104,206 @@ const apiKeyAuth = (req, res, next) => {
     res.status(401).json({ success: false, error: 'Unauthorized: Invalid or missing API Key' });
 };
 
-// --- AUXILIARY FUNCTIONS ---
-function formatTimeRemaining(timeRemainingMs) { /* ...código inalterado... */ }
-async function waitForImagesLoad(page) { /* ...código inalterado... */ }
-async function waitForContentLoad(page) { /* ...código inalterado... */ }
+/**
+ * Formata o tempo restante em formato legível
+ * @param {number} timeRemainingMs - Tempo restante em milissegundos
+ * @returns {string} - Tempo formatado (ex: "45 minutes", "2 hours")
+ */
+function formatTimeRemaining(timeRemainingMs) {
+    if (timeRemainingMs <= 0) return 'Expired';
+    
+    const hours = Math.floor(timeRemainingMs / (1000 * 60 * 60));
+    const minutes = Math.floor((timeRemainingMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) {
+        return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    }
+    return `${minutes}m`;
+}
+
+/**
+ * Waits for all images to be completely loaded
+ * @param {import('puppeteer').Page} page
+ */
+async function waitForImagesLoad(page) {
+    console.log('Waiting for complete image loading...');
+    
+    await page.evaluate(() => {
+        return new Promise((resolve) => {
+            const images = Array.from(document.querySelectorAll('img'));
+            if (images.length === 0) {
+                resolve();
+                return;
+            }
+
+            let loadedImages = 0;
+            const totalImages = images.length;
+            
+            console.log(`Total images found: ${totalImages}`);
+
+            const checkComplete = () => {
+                loadedImages++;
+                console.log(`Image loaded: ${loadedImages}/${totalImages}`);
+                
+                if (loadedImages === totalImages) {
+                    console.log('All images have been loaded');
+                    resolve();
+                }
+            };
+
+            images.forEach((img, index) => {
+                if (img.complete && img.naturalWidth > 0) {
+                    console.log(`Image ${index + 1} already loaded: ${img.src}`);
+                    checkComplete();
+                } else {
+                    console.log(`Waiting for image ${index + 1} to load: ${img.src}`);
+                    
+                    const onLoad = () => {
+                        console.log(`Image ${index + 1} loaded successfully`);
+                        img.removeEventListener('load', onLoad);
+                        img.removeEventListener('error', onError);
+                        checkComplete();
+                    };
+
+                    const onError = () => {
+                        console.warn(`Failed to load image ${index + 1}: ${img.src}`);
+                        img.removeEventListener('load', onLoad);
+                        img.removeEventListener('error', onError);
+                        checkComplete(); // Count as loaded even with error
+                    };
+
+                    img.addEventListener('load', onLoad);
+                    img.addEventListener('error', onError);
+
+                    // Force reload if necessary
+                    if (img.src) {
+                        const currentSrc = img.src;
+                        img.src = '';
+                        img.src = currentSrc;
+                    }
+                }
+            });
+
+            // Safety timeout
+            setTimeout(() => {
+                console.log('Image loading timeout, continuing...');
+                resolve();
+            }, 15000);
+        });
+    });
+}
+
+/**
+ * Aguarda que todos os elementos críticos sejam carregados
+ * @param {import('puppeteer').Page} page
+ */
+async function waitForContentLoad(page) {
+    try {
+        // Wait for basic page loading
+        await page.waitForLoadState?.('networkidle') || new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Wait for images to load
+        await waitForImagesLoad(page);
+
+        console.log('Waiting for fonts to load...');
+        await Promise.race([
+            page.evaluateHandle(() => document.fonts.ready),
+            new Promise(resolve => setTimeout(resolve, 5000))
+        ]);
+
+        console.log('Waiting for ApexCharts to load...');
+        await page.waitForFunction(
+            () => typeof window.ApexCharts !== 'undefined',
+            { timeout: 10000 }
+        ).catch(() => console.log('ApexCharts not found, continuing...'));
+
+        console.log('Forcing chart initialization...');
+        await page.evaluate(() => {
+            if (window.Reports && typeof window.Reports.init === 'function') {
+                console.log('Initializing via Reports.init()');
+                try {
+                    window.Reports.init();
+                } catch (e) {
+                    console.error('Error in Reports initialization:', e);
+                }
+            }
+
+            if (window.ApexCharts) {
+                console.log('Configurando Apex global');
+                window.Apex = {
+                    chart: {
+                        width: '100%',
+                        maxWidth: 750,
+                        parentHeightOffset: 0,
+                        redrawOnParentResize: false,
+                        redrawOnWindowResize: false,
+                        animations: { enabled: false },
+                        toolbar: { show: false },
+                        zoom: { enabled: false }
+                    },
+                    responsive: [{
+                        breakpoint: 1600,
+                        options: {
+                            chart: {
+                                width: '100%',
+                                maxWidth: 750
+                            },
+                            legend: {
+                                position: 'bottom',
+                                fontSize: '12px'
+                            }
+                        }
+                    }]
+                };
+            }
+
+            if (window.ApexCharts && window.Reports) {
+                setTimeout(() => {
+                    try {
+                        window.Reports.initializeAllCharts();
+                        window.Reports.initializeMiniCharts();
+                    } catch (e) {
+                        console.error('Error in re-initialization:', e);
+                    }
+                }, 1000);
+            }
+        });
+
+        // Wait for chart rendering
+        console.log('Waiting for chart rendering...');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        // Final verification
+        const allLoaded = await page.evaluate(() => {
+            // Check images
+            const images = Array.from(document.querySelectorAll('img'));
+            const imagesLoaded = images.every(img => img.complete && img.naturalWidth > 0);
+            
+            // Check charts
+            const charts = document.querySelectorAll('.apexcharts-canvas svg');
+            const chartsRendered = charts.length === 0 || Array.from(charts).some(svg => {
+                return svg.querySelector('g.apexcharts-series path, g.apexcharts-series rect, g.apexcharts-heatmap-series rect');
+            });
+
+            console.log(`Images loaded: ${imagesLoaded}, Charts rendered: ${chartsRendered}`);
+            return imagesLoaded && chartsRendered;
+        });
+
+        console.log(`Loading completed: ${allLoaded ? 'Success' : 'Partial'}`);
+
+    } catch (error) {
+        console.log('Error waiting for content loading:', error.message);
+    }
+}
 
 // --- API ROUTES ---
 
 app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
-    const { url, options = {}, landscape } = req.body;
+    const { url, options = {}, landscape, filename: requestedFilename } = req.body;
     const startTime = Date.now();
     const requestId = crypto.randomBytes(8).toString('hex');
 
-    logOperation('pdf_request', 'PDF generation request received', { requestId, url });
+    logOperation('pdf_request', 'PDF generation request received', { requestId, url, requestedFilename });
 
     if (!url) {
         return res.status(400).json({ success: false, error: 'The "url" property is required.' });
@@ -127,8 +314,22 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
 
     let browser = null;
     try {
-        const filename = `${crypto.randomBytes(20).toString('hex')}.pdf`;
+        // Use the requested filename if provided, otherwise generate a random one
+        let filename;
+        if (requestedFilename) {
+            // Sanitize the filename to prevent path traversal and ensure it has .pdf extension
+            const sanitizedName = requestedFilename.replace(/[^a-zA-Z0-9._-]/g, '_');
+            filename = sanitizedName.endsWith('.pdf') ? sanitizedName : `${sanitizedName}.pdf`;
+        } else {
+            filename = `${crypto.randomBytes(20).toString('hex')}.pdf`;
+        }
         const outputPath = path.join(OUTPUT_DIR, filename);
+
+        // Remove existing file if it exists
+        if (fs.existsSync(outputPath)) {
+            fs.unlinkSync(outputPath);
+            logOperation('file_replaced', `Existing file removed: ${filename}`, { filename });
+        }
 
         browser = await puppeteer.launch({
             headless: "new",
@@ -246,6 +447,65 @@ app.get('/status', (req, res) => {
     });
 });
 
-app.post('/debug-page', apiKeyAuth, async (req, res) => { /* ...código inalterado... */ });
+app.post('/debug-page', apiKeyAuth, async (req, res) => {
+    const { url } = req.body;
+    if (!url) {
+        return res.status(400).json({ error: 'URL is required' });
+    }
+
+    let browser;
+    try {
+        browser = await puppeteer.launch({
+            headless: "new",
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu'
+            ]
+        });
+
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 2 });
+        await page.goto(url, { waitUntil: 'networkidle0', timeout: 120000 });
+        
+        const debugInfo = await page.evaluate(() => {
+            const images = Array.from(document.querySelectorAll('img'));
+            const charts = document.querySelectorAll('.apexcharts-canvas');
+            
+            return {
+                images: {
+                    total: images.length,
+                    loaded: images.filter(img => img.complete && img.naturalWidth > 0).length,
+                    failed: images.filter(img => img.complete && img.naturalWidth === 0).length,
+                    pending: images.filter(img => !img.complete).length
+                },
+                charts: {
+                    total: charts.length,
+                    rendered: Array.from(charts).filter(chart => {
+                        return chart.querySelector('svg g.apexcharts-series path, svg g.apexcharts-series rect');
+                    }).length
+                },
+                viewport: {
+                    width: window.innerWidth,
+                    height: window.innerHeight
+                }
+            };
+        });
+
+        await browser.close();
+
+        res.json({
+            success: true,
+            url: url,
+            debugInfo: debugInfo,
+            timestamp: new Date().toISOString()
+        });
+
+    } catch (error) {
+        if (browser) await browser.close();
+        res.status(500).json({ error: 'Debug error', details: error.message });
+    }
+});
 
 module.exports = app;
