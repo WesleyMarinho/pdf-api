@@ -381,7 +381,7 @@ app.post('/generate-pdf', apiKeyAuth, async (req, res) => {
 app.get('/download/:filename', (req, res) => {
     const { filename } = req.params;
     
-    if (!filename || !/^[a-f0-9]+\.pdf$/.test(filename)) {
+    if (!filename || !/^[a-zA-Z0-9._-]+\.pdf$/.test(filename)) {
         return res.status(400).json({ error: 'Invalid filename format.' });
     }
     
@@ -397,7 +397,7 @@ app.get('/download/:filename', (req, res) => {
 app.get('/view/:filename', (req, res) => {
     const { filename } = req.params;
 
-    if (!filename || !/^[a-f0-9]+\.pdf$/.test(filename)) {
+    if (!filename || !/^[a-zA-Z0-9._-]+\.pdf$/.test(filename)) {
         return res.status(400).json({ error: 'Invalid filename format.' });
     }
 
