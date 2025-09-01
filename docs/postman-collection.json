@@ -340,7 +340,7 @@
 								}
 							],
 							"cookie": [],
-							"body": "{\n  \"status\": \"healthy\",\n  \"version\": \"1.5.0\",\n  \"uptime\": \"2h 30m 15s\",\n  \"timestamp\": \"2024-01-20T12:45:30Z\",\n  \"endpoints\": {\n    \"POST /generate-pdf\": \"PDF generation from URLs\",\n    \"POST /debug-page\": \"Page debugging\",\n    \"GET /download/:filename\": \"Secure PDF download (force download)\",\n    \"GET /view/:filename\": \"Inline PDF viewing (open in browser)\",\n    \"GET /files\": \"List available files and expiration times\",\n    \"GET /status\": \"API Status\"\n  },\n  \"security\": {\n    \"download_headers\": \"Security headers configured\",\n    \"filename_validation\": \"Strict filename validation\",\n    \"stream_based\": \"Stream-based download for efficiency\",\n    \"https_enforced\": \"HTTPS protocol enforced\",\n    \"hsts_enabled\": \"HTTP Strict Transport Security active\"\n  }\n}"
+							"body": "{\n  \"status\": \"healthy\",\n  \"version\": \"1.0.1\",\n  \"uptime\": \"2h 30m 15s\",\n  \"timestamp\": \"2024-01-20T12:45:30Z\",\n  \"endpoints\": {\n    \"POST /generate-pdf\": \"PDF generation from URLs\",\n    \"POST /debug-page\": \"Page debugging\",\n    \"GET /download/:filename\": \"Secure PDF download (force download)\",\n    \"GET /view/:filename\": \"Inline PDF viewing (open in browser)\",\n    \"GET /files\": \"List available files and expiration times\",\n    \"GET /status\": \"API Status\"\n  },\n  \"security\": {\n    \"download_headers\": \"Security headers configured\",\n    \"filename_validation\": \"Strict filename validation\",\n    \"stream_based\": \"Stream-based download for efficiency\",\n    \"https_enforced\": \"HTTPS protocol enforced\",\n    \"hsts_enabled\": \"HTTP Strict Transport Security active\"\n  }\n}"
 						}
 					]
 				},
@@ -477,7 +477,7 @@
 		},
 		{
 			"key": "api_version",
-			"value": "1.5.0",
+			"value": "1.0.1",
 			"type": "string",
 			"description": "Current API version"
 		},
