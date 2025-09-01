@@ -1,7 +1,7 @@
 {
 	"info": {
 		"_postman_id": "pdf-api-collection-2024",
-		"name": "PDF Generation API v1.5.0",
+		"name": "PDF Generation API v1",
 		"description": "Complete collection for PDF Generation API with security enhancements and HTTPS enforcement. This API generates PDFs from URLs using Puppeteer with optimized rendering and comprehensive security features.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		"_exporter_id": "pdf-api-exporter"
